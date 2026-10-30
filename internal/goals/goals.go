@@ -386,7 +386,7 @@ func (s *Service) prompt(g store.Goal, n int64, events []store.Event) string {
 			fmt.Fprintf(&dec, "- #%d %s「%s」→ %s\n", it.ID, it.Kind, clip(oneLine(it.Title), 80), it.Status)
 		}
 	}
-	return fmt.Sprintf(`你在为目标「%s」做后台心跳 #%d。没有人在看，输出是日志。自主级别 L%d。
+	return fmt.Sprintf(`你在为目标「%s」做后台心跳 #%d。没有人在看，输出是日志。自主级别 L%d。现在是 %s。
 <goal>
 %s
 </goal>
@@ -413,7 +413,7 @@ func (s *Service) prompt(g store.Goal, n int64, events []store.Event) string {
   {"do":"task","key":"去重键","prompt":"子任务指令","timeout_sec":600}
   {"do":"state","md":"新的 STATE.md 全文"}
   {"do":"finding","md":"一条值得长期保留的发现"}`,
-		g.Title, n, min(g.Level, 2), s.ReadGoalMD(g), s.ReadStateMD(g), ev.String(), s.Findings(g, 20), dec.String())
+		g.Title, n, min(g.Level, 2), s.Now().Format("2006-01-02 15:04 MST"), s.ReadGoalMD(g), s.ReadStateMD(g), ev.String(), s.Findings(g, 20), dec.String())
 }
 
 func (s *Service) run(g store.Goal) {

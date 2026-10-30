@@ -226,3 +226,16 @@ func TestScopeAndExtrasCarryNoToken(t *testing.T) {
 		}
 	}
 }
+
+func TestPromptCarriesClockGoalAndState(t *testing.T) {
+	f := setup(t)
+	*f.now = time.Date(2026, 1, 2, 3, 4, 0, 0, time.UTC)
+	bot, _ := f.st.Bot("pm-b")
+	f.gs.apply(f.goal(t), bot, 1, "```pimu\n[{\"do\":\"state\",\"md\":\"round: 7\"}]\n```")
+	p := f.gs.prompt(f.goal(t), 8, nil)
+	for _, want := range []string{"2026-01-02 03:04", "watch the thing", "round: 7", "心跳 #8"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("prompt lacks %q", want)
+		}
+	}
+}
