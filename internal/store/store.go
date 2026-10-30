@@ -291,7 +291,7 @@ type Bot struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
-// Bot safety modes (docs/V10.md).
+// Bot safety modes (docs/HISTORY.md).
 const (
 	ModeTrusted = "trusted"
 	ModeGuarded = "guarded"

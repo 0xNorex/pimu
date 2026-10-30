@@ -1,6 +1,6 @@
 // Package extensions holds the pi extensions (TypeScript). This test runs
 // pimu-agent.ts under node with a fake pi and a fake Pimu API, to pin down the
-// gate's decisions (docs/V9.md). It is skipped when node ≥ 22.18 is missing.
+// gate's decisions (docs/HISTORY.md). It is skipped when node ≥ 22.18 is missing.
 package extensions
 
 import (

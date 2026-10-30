@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-// Approval lifecycle (docs/V9.md). One inbox row per request, keyed by
+// Approval lifecycle (docs/HISTORY.md). One inbox row per request, keyed by
 // (bot, goal|job, args hash), where the hash is computed by Pimu from the
 // tool and its canonical arguments:
 //
@@ -53,7 +53,7 @@ func (s *Store) ExpireApprovals() (int64, error) {
 // it (session/tool call id). It returns the row and a verdict; isNew reports a
 // freshly filed request (to notify the user).
 func (s *Store) Approve(it Item, ref string) (out Item, verdict string, isNew bool, err error) {
-	// goal 0 and job 0 is the bot's main session (guarded mode, docs/V10.md).
+	// goal 0 and job 0 is the bot's main session (guarded mode, docs/HISTORY.md).
 	if it.BotID == "" || it.ArgsHash == "" || (it.GoalID != 0 && it.JobID != 0) {
 		return Item{}, "", false, errors.New("approval needs bot, args hash and at most one of goal/job")
 	}

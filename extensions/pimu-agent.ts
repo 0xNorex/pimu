@@ -1,4 +1,4 @@
-// pimu-agent: Pimu's bot runtime inside pi (docs/AUTONOMY.md, docs/V9.md).
+// pimu-agent: Pimu's bot runtime inside pi (docs/AUTONOMY.md, docs/HISTORY.md).
 // Install: make install-agent  (copies to ~/.pi/agent/extensions/)
 //
 // Inert unless Pimu started this pi with PIMU_BOT_DIR:
@@ -10,7 +10,7 @@
 //   session's own bot / goal / job.
 // - a bot's main session (no PIMU_LEVEL): the pimu_task tool. Trusted mode (default):
 //   native pi, plus a best-effort block on reading credentials. Guarded mode
-//   (PIMU_MODE=guarded, docs/V10.md): the L2 gate below, waiting in the chat for
+//   (PIMU_MODE=guarded, docs/HISTORY.md): the L2 gate below, waiting in the chat for
 //   the user's decision; dangerous commands ask instead of being refused, and
 //   pimu_task stays allowed (the job it starts is gated on its own). This is
 //   app-level gating, not an OS sandbox.

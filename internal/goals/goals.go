@@ -133,7 +133,7 @@ func (s *Service) Extras(id string) (args, env []string) {
 		goalID = s.st.TaskGoal(tid)
 	} else if b, err := s.st.Bot(id); err == nil {
 		// pimu_task (delegation) needs to reach Pimu from the bot session;
-		// guarded mode turns on the L2 gate there (docs/V10.md).
+		// guarded mode turns on the L2 gate there (docs/HISTORY.md).
 		env = []string{"PIMU_BOT_DIR=" + s.BotDir(id), "PIMU_BOT_ID=" + id, "PIMU_API=" + s.apiURL}
 		if b.Mode == store.ModeGuarded {
 			env = append(env, "PIMU_MODE=guarded")
