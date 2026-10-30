@@ -305,8 +305,10 @@ func (s *Service) deliver(j store.Job) {
 	case "cancelled":
 		body = "用户取消了这个任务，没有结果。"
 	}
-	msg := fmt.Sprintf("[Pimu 后台任务 #%d「%s」已%s]\n\n%s\n\n（这是你之前用 pimu_task 派出去的任务，结果由 Pimu 自动送回。请用一两句话向用户汇报要点。）",
-		j.ID, j.Title, map[string]string{"completed": "完成", "failed": "失败", "cancelled": "取消"}[j.Status], body)
+	// The approval line comes from Pimu's records: the worker cannot see the
+	// gate's waits, so its own account of approvals may be wrong.
+	msg := fmt.Sprintf("[Pimu 后台任务 #%d「%s」已%s]\n\n%s\n\n%s（以 Pimu 记录为准，与任务自述不符时以此为准）\n\n（这是你之前用 pimu_task 派出去的任务，结果由 Pimu 自动送回。请用一两句话向用户汇报要点。）",
+		j.ID, j.Title, map[string]string{"completed": "完成", "failed": "失败", "cancelled": "取消"}[j.Status], body, j.Approvals.Line())
 	resp, err := s.hub.Call(ctx, r, map[string]any{"type": "prompt", "message": msg, "streamingBehavior": "followUp"}, callWait)
 	if err != nil || !resp.Success {
 		slog.Warn("deliver job failed, will retry", "job", j.ID, "err", firstErr(err, resp.Error))

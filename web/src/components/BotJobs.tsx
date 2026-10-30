@@ -19,6 +19,15 @@ const STATUS: Record<Job['status'], [string, 'default' | 'secondary' | 'outline'
   interrupted: ['被中断', 'destructive'],
   cancelled: ['已取消', 'outline'],
 }
+// From Pimu's approval records, not from what the worker says.
+const approvalText = (j: Job) => {
+  const a = j.approvals
+  if (!a?.approval_count) return ' · 无审批'
+  const parts = [`批准 ${a.approved}`, `拒绝 ${a.denied}`]
+  if (a.expired) parts.push(`过期 ${a.expired}`)
+  if (a.pending) parts.push(`待定 ${a.pending}`)
+  return ` · 审批 ${a.approval_count}（${parts.join('，')}）`
+}
 const live = (j: Job) => j.status === 'queued' || j.status === 'running' || j.status === 'waiting_approval'
 
 // Background jobs this bot delegated with pimu_task; results flow back into the chat.
@@ -68,6 +77,7 @@ function Row({ j, reload }: { j: Job; reload: () => void }) {
                 {fmtDate(j.createdAt)}
                 {j.tokens > 0 && ` · ${Math.round(j.tokens / 1000)}k tok`}
                 {j.status === 'completed' && (j.delivered ? ' · 已送回对话' : ' · 等待送回')}
+                {approvalText(j)}
               </span>
             </span>
           </CollapsibleTrigger>

@@ -63,6 +63,8 @@ type Job struct {
 	CreatedAt  string  `json:"createdAt"`
 	StartedAt  *string `json:"startedAt"`
 	FinishedAt *string `json:"finishedAt"`
+	// Approvals is counted from Pimu's approval records, not stored.
+	Approvals ApprovalStats `json:"approvals"`
 }
 
 const jobCols = `id, bot_id, title, prompt, status, session_id, result, error, tokens, delivered, created_at, started_at, finished_at`
@@ -90,7 +92,14 @@ func (s *Store) queryJobs(q string, args ...any) ([]Job, error) {
 		}
 		out = append(out, j)
 	}
-	return out, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	for i := range out {
+		out[i].Approvals, _ = s.JobApprovalStats(out[i].ID)
+	}
+	return out, nil
 }
 
 func (s *Store) CreateJob(botID, title, prompt string) (Job, error) {
@@ -103,7 +112,11 @@ func (s *Store) CreateJob(botID, title, prompt string) (Job, error) {
 }
 
 func (s *Store) Job(id int64) (Job, error) {
-	return scanJob(s.db.QueryRow(`SELECT `+jobCols+` FROM jobs WHERE id = ?`, id))
+	j, err := scanJob(s.db.QueryRow(`SELECT `+jobCols+` FROM jobs WHERE id = ?`, id))
+	if err == nil {
+		j.Approvals, _ = s.JobApprovalStats(id)
+	}
+	return j, err
 }
 
 // Jobs lists a bot's jobs, newest first ("" = all bots).

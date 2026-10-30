@@ -173,3 +173,36 @@ func TestScope(t *testing.T) {
 	}
 	e.wait(t, j.ID, status("completed"))
 }
+
+// The bot is told the approval counts from Pimu's records, whatever the worker says.
+func TestDeliveryCarriesApprovalCounts(t *testing.T) {
+	e := setup(t, 1, nil)
+	j, _, _ := e.js.Create(e.bot, "t", "SLEEP")
+	e.wait(t, j.ID, status("running"))
+	for i, st := range []string{"approved", "denied"} {
+		it, _, _, err := e.st.Approve(store.Item{BotID: e.bot, JobID: j.ID, Tool: "write", ArgsHash: string(rune('a' + i))}, "x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = e.st.SetItemStatus(it.ID, st, "new")
+		if st == "approved" {
+			_, _ = e.st.ApprovalStatus(it.ID, "x") // the gate claims it: used
+		}
+	}
+	time.Sleep(100 * time.Millisecond)
+	if err := e.js.Steer(j.ID, "no approvals were needed"); err != nil {
+		t.Fatal(err)
+	}
+	got := e.wait(t, j.ID, func(j store.Job) bool { return j.Status == "completed" && j.Delivered })
+	if got.Approvals != (store.ApprovalStats{Requested: 2, Approved: 1, Denied: 1}) {
+		t.Fatalf("stats %+v", got.Approvals)
+	}
+	r := e.h.Running(e.bot)
+	if r == nil {
+		t.Fatal("bot session not running")
+	}
+	resp, err := e.h.Call(context.Background(), r, map[string]any{"type": "get_last_assistant_text"}, 5*time.Second)
+	if err != nil || !strings.Contains(string(resp.Data), "[Pimu] approvals: 2 requested, 1 approved, 1 denied") {
+		t.Fatalf("delivered: %s %v", resp.Data, err)
+	}
+}
