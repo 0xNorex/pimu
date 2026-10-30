@@ -177,10 +177,12 @@ func (s *Service) runOnce(ctx context.Context, t store.Task, run store.Run) (sta
 			return "failed", "", "reuse mode needs a session id"
 		}
 		sid = *t.SessionID
-		if s.hub.Running(sid) != nil {
+		if r := s.hub.Running(sid); r != nil && r.Streaming() {
 			return "failed", "", "session busy"
 		}
 	}
+	// A reused session (a bot) that is already open stays open afterwards.
+	keepOpen := t.SessionMode == "reuse" && s.hub.Running(sid) != nil
 	var r *hub.Run
 	for {
 		var err error
@@ -205,7 +207,9 @@ func (s *Service) runOnce(ctx context.Context, t store.Task, run store.Run) (sta
 		}
 		break
 	}
-	defer s.hub.Release(context.Background(), sid)
+	if !keepOpen {
+		defer s.hub.Release(context.Background(), sid)
+	}
 	if err := s.st.StartRun(run.ID, sid); err != nil {
 		return "failed", "", err.Error()
 	}
