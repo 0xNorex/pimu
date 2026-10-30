@@ -51,8 +51,10 @@ Open the URL, paste the token. On iPhone: Safari → Share → Add to Home Scree
 The home screen is a list of bots, like a messaging app of your assistants.
 A bot **is** a pi session: the conversation, model, thinking level and system
 prompt live in pi's session file. Pimu's SQLite `bots` table keeps only what pi
-cannot: emoji, one-line description, persona text, cwd, archived (and the name,
-because pi does not write a session file until the first message).
+cannot: one-line description, persona text, cwd, archived (and the name,
+because pi does not write a session file until the first message). Avatars are
+GitHub-style identicons derived from the session id. Creating a bot needs at
+most a name (empty → 助手 N); persona etc. are edited later.
 
 - Persona is passed as `--append-system-prompt` every time pi starts for that
   session; pi records it as a system section in the session file. Editing the
@@ -62,8 +64,8 @@ because pi does not write a session file until the first message).
   `docs/compaction.md`). Pimu adds nothing.
 - Raw pi sessions that are not bots sit under 其他会话 and can be adopted
   (菜单 → 设为 Bot). Task-run sessions (`pimu-t*`) are hidden from the home list.
-- Composer: 📎 images go to the model as prompt images (a text-only model ignores
-  them; the UI warns). Other files are uploaded (≤25 MB, sanitized names) to
+- Composer: 📎 images go to the model as prompt images (if pi's model entry lacks
+  `"image"` in `input`, pi drops them and the UI warns). Other files are uploaded (≤25 MB, sanitized names) to
   `<cwd>/.pimu/uploads/<session>/` and their path is added to the message, so pi
   reads them with its own tools. Paste and drag-drop work too. 🎤 uses the
   browser Web Speech API (zh-CN); the button is hidden where unsupported.

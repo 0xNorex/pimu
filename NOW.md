@@ -9,9 +9,10 @@ V1–V4 built, 2026-10-30.
   `--append-system-prompt`; tasks target a bot; composer with images, file upload, voice.
 - Verified on box (pi 1.4.0, real model): 3 bots with personas obeyed; persona and name
   recorded in the session files; task inside a bot ran and showed in its chat; uploaded
-  file read by pi via the UI; image prompt accepted and ignored by the text-only model.
+  file read by pi via the UI; image sent from the UI described correctly by the model
+  (needed `"input": ["text","image"]` in ~/.pi/agent/models.json).
 - Not verified: iPhone Safari by hand (incl. Web Speech in a Home Screen app),
-  systemd/cloudflared, real Telegram delivery, a vision model.
+  systemd/cloudflared, real Telegram delivery.
 - Known gaps: guard in rpc mode only flags shutdown; screenshots with a `filename` arg
   return no image; unread marks are per device (localStorage); no tests by choice.
 - Measured: pimu RSS ≈ 11 MB; each pi ≈ 117–123 MB → `PIMU_MAX_PROCS=3` fits 2C3G.
