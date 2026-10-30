@@ -121,12 +121,46 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
 - Bundle: main JS 271.83 → 281.13 kB (gzip 86.51 → 89.25), CSS 90.18 → 99.81 kB
   (gzip 15.49 → 17.34).
 
+## V15 Appearance, texture, e2e
+
+- 外观 settings: theme with a circular View Transition reveal (also a sidebar footer
+  toggle), six palettes as live previews, font size, width, density, radius, code font
+  and block style, motion (system/full/reduced/off), paper texture, haptics, details
+  expanded by default, send key. CSS variables only; an inline boot script applies them
+  before first paint and sets the PWA theme-color per palette. Synced across devices
+  via `/api/prefs` (newest wins).
+- Texture: a top-edge highlight on raised surfaces, a lift shadow on the focused
+  composer, softer code blocks, optional grain; the chat view is a `<main>` landmark.
+- Bot list: the working ring also shows while a background job of that bot runs
+  (`jobsRunning` on `/api/bots`, one grouped COUNT query).
+- E2E suite (`make e2e`): real server + real pi + scripted mock model, 29 flows.
+  Bugs it found, root causes fixed:
+  - mtimes were unix ns (> 2^53): the browser rounded them, so every settings edit
+    (model, extension, MCP toggle, AGENTS.md save) from the web UI got a 409. Now µs.
+  - With 3 pi processes open (PIMU_MAX_PROCS) a background job or heartbeat waited for
+    the idle reaper (minutes) while showing 运行中. Pimu now stops the least recently
+    used idle process to make room.
+  - A message sent right after a bot edit (persona/mode restarts pi) hit the closing
+    process: 502 `file already closed`. Release now waits until the run is gone and
+    Ensure starts a fresh process instead of returning a closing one.
+  - The composer cleared its text only after the send request returned, wiping
+    whatever was typed meanwhile (the next follow-up or steer) and letting a double
+    Enter send twice. It clears at once and restores on failure.
+  - Opening a bot chat from the inbox or a link while the sidebar showed 会话 left the
+    row invisible; the sidebar now follows the open chat to its tab.
+  - Skipped View Transitions (quick successive theme or list changes) raised unhandled
+    promise rejections.
+- Bundle: main JS 281.13 → 284.96 kB (gzip 89.25 → 90.65), CSS 99.81 → 107.41 kB
+  (gzip 17.34 → 18.92); the appearance page is in the lazy Settings chunk.
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's
   process memory (a job's cap only grants its own scope). A later extension could
   change `tool_call.input` after the gate.
 - In guarded mode, MCP tools without `readOnlyHint` (e.g. `browser_navigate`) ask.
+- Cloudflare Access login is covered by Go unit tests only (cfaccess requires https
+  issuer and certs URLs, so the e2e suite cannot fake it).
 - Not verified: iPhone Safari by hand, Telegram delivery, very long gate waits, the
   daily token cap, switching mode while a reply is streaming, the systemd sandbox at runtime and
   SSE through a real tunnel (unit syntax checked with `systemd-analyze verify`).
