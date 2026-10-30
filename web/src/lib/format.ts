@@ -5,7 +5,7 @@ export function textOf(m: Message): string {
   return m.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
 }
 
-export function truncate(s: string, n: number): string {
+function truncate(s: string, n: number): string {
   const one = s.replace(/\s+/g, ' ').trim()
   return one.length > n ? one.slice(0, n) + '…' : one
 }

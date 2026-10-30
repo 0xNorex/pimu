@@ -23,7 +23,7 @@ function greeting() {
 // Task runs (pimu-t…), heartbeats (pimu-g…) and background jobs (pimu-j…) live under their task/goal/bot, not here.
 const isBackground = (id: string) => /^pimu-[tgj]\d/.test(id)
 // "/home/me/proj/x" -> "~/proj/x"
-export const shortPath = (p: string, home: string) => (home && (p === home || p.startsWith(home + '/')) ? '~' + p.slice(home.length) : p)
+const shortPath = (p: string, home: string) => (home && (p === home || p.startsWith(home + '/')) ? '~' + p.slice(home.length) : p)
 
 // Creating always means a new session; any session can later be set as a bot.
 export async function newSession(cwd?: string) {

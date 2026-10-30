@@ -28,7 +28,7 @@ import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
 import { MessageItem } from './MessageItem'
 import { newSession } from './BotList'
-import { ModelPicker } from './ModelPicker'
+import { ModelPicker, modelKey } from './ModelPicker'
 
 function useElapsed(since: number | null) {
   const [now, setNow] = useState(() => Date.now())
@@ -55,16 +55,6 @@ export function ChatView({ id }: { id: string }) {
   const connected = useSessionEvents(id, dispatch, setDetail)
   const elapsed = useElapsed(s.streaming ? s.runStartedAt : null)
 
-  // Idle sessions report only provider/id (read from the session file); look up the display name.
-  const [modelName, setModelName] = useState<string>()
-  const idleModel = detail?.state?.model && !detail.state.model.name ? `${detail.state.model.provider}/${detail.state.model.id}` : ''
-  useEffect(() => {
-    if (!idleModel) return
-    api<{ models: Model[] }>('/api/models')
-      .then((r) => setModelName(r.models.find((m) => `${m.provider}/${m.id}` === idleModel)?.name))
-      .catch(() => {})
-  }, [idleModel])
-
   const loadBot = useCallback(() => {
     api<{ bot: Bot }>(`/api/bots/${id}`).then((r) => setBot(r.bot)).catch(() => setBot(null))
   }, [id])
@@ -73,17 +63,21 @@ export function ChatView({ id }: { id: string }) {
     markSeen(id)
   }, [id, s.messages.length, s.streaming])
 
-  // Warn before sending images to a text-only model (pi drops them silently).
-  const modelKey = detail?.state?.model ? `${detail.state.model.provider}/${detail.state.model.id}` : ''
+  // One lookup in pi's model list: the display name (idle sessions report only
+  // provider/id) and whether it takes images (pi drops them silently otherwise).
+  const [modelName, setModelName] = useState<string>()
+  const curModel = detail?.state?.model
+  const key = modelKey(curModel)
   useEffect(() => {
-    if (!modelKey) return
+    if (!key) return
     api<{ models: Model[] }>('/api/models')
       .then((r) => {
-        const m = r.models.find((x) => `${x.provider}/${x.id}` === modelKey) as (Model & { input?: string[] }) | undefined
+        const m = r.models.find((x) => modelKey(x) === key) as (Model & { input?: string[] }) | undefined
+        setModelName(m?.name)
         setVisionOk(!m?.input || m.input.includes('image'))
       })
       .catch(() => {})
-  }, [modelKey])
+  }, [key])
 
   const refreshDetail = useCallback(() => {
     api<SessionDetail>(`/api/sessions/${id}`).then(setDetail).catch(() => {})

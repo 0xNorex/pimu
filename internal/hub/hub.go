@@ -36,7 +36,6 @@ type Run struct {
 	proc *pirpc.Proc
 
 	mu         sync.Mutex
-	file       string
 	streaming  bool
 	lastActive time.Time
 	timeouts   int
@@ -220,18 +219,12 @@ func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Ru
 	pimuEvent(stream, map[string]any{"type": "proc_state", "state": "starting"})
 	go h.watch(r, stream)
 
-	resp, err := h.Call(ctx, r, map[string]any{"type": "get_state"}, cmdTimeout)
+	// get_state doubles as the readiness check.
+	_, err = h.Call(ctx, r, map[string]any{"type": "get_state"}, cmdTimeout)
 	if err != nil {
 		go proc.Close()
 		return nil, fmt.Errorf("pi start: %w: %s", err, proc.StderrTail())
 	}
-	var st struct {
-		SessionFile string `json:"sessionFile"`
-	}
-	_ = json.Unmarshal(resp.Data, &st)
-	r.mu.Lock()
-	r.file = st.SessionFile
-	r.mu.Unlock()
 	pimuEvent(stream, map[string]any{"type": "proc_state", "state": "ready"})
 	h.Broadcast(map[string]any{"type": "proc_state", "id": id, "state": "ready"})
 	return r, nil
@@ -422,11 +415,4 @@ func (h *Hub) Query(ctx context.Context, typ string) (json.RawMessage, error) {
 		return nil, errors.New(resp.Error)
 	}
 	return resp.Data, nil
-}
-
-// File returns the session file reported by pi, if known.
-func (r *Run) File() string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.file
 }

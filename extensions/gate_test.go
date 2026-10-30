@@ -62,7 +62,7 @@ type api struct {
 
 func (a *api) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Header.Get("X-Pimu-Cap") != a.tok {
-		http.Error(w, "forbidden", 403)
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 	var body map[string]any

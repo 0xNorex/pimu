@@ -14,7 +14,7 @@ const icon = {
 
 // Browser tools come from @playwright/mcp via pi's MCP adapter (mcp__playwright__browser_*).
 const BROWSER_PREFIX = 'mcp__playwright__'
-export const isBrowserTool = (name: string) => name.startsWith(BROWSER_PREFIX) || name.startsWith('browser_')
+const isBrowserTool = (name: string) => name.startsWith(BROWSER_PREFIX) || name.startsWith('browser_')
 const shortName = (name: string) => (name.startsWith(BROWSER_PREFIX) ? name.slice(BROWSER_PREFIX.length) : name)
 
 export function ActivityList({ items, onJump }: { items: { tool: ToolView; ts: number }[]; onJump: (toolCallId: string) => void }) {
