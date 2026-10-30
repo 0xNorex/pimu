@@ -1,7 +1,8 @@
 import { Toaster } from '@/components/ui/sonner'
 import { ChatView } from '@/components/ChatView'
 import { LoginPage } from '@/components/LoginPage'
-import { MemoryPage } from '@/components/MemoryPage'
+import { SECTIONS, SettingsPage, type Section } from '@/components/SettingsPage'
+import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
 import { TaskDetail } from '@/components/TaskDetail'
 import { TasksPage } from '@/components/TasksPage'
@@ -17,16 +18,16 @@ export default function App() {
       <TasksPage />
     ) : route.name === 'task' ? (
       <TaskDetail key={route.id} id={route.id} bot={route.bot} />
-    ) : route.name === 'memory' ? (
-      <MemoryPage />
+    ) : route.name === 'settings' ? (
+      <SettingsPage section={(SECTIONS.some(([k]) => k === route.section) ? route.section : 'models') as Section} />
     ) : null
   return (
-    <div className="flex h-dvh overflow-hidden bg-background text-foreground">
+    <div className="flex h-full overflow-hidden bg-background text-foreground">
       {route.name === 'login' ? (
         <LoginPage />
       ) : (
         <>
-          <aside className={`${page ? 'hidden' : 'flex'} w-full flex-col lg:flex lg:w-[340px] lg:shrink-0 lg:border-r`}>
+          <aside className={`${page ? 'hidden' : 'flex'} w-full flex-col lg:flex lg:w-[340px] lg:shrink-0 lg:border-r lg:bg-sidebar`}>
             <BotList activeId={activeId} route={route.name} />
           </aside>
           {page ?? (
@@ -34,6 +35,7 @@ export default function App() {
           )}
         </>
       )}
+      {route.name !== 'login' && <Switcher />}
       <Toaster position="top-center" />
     </div>
   )

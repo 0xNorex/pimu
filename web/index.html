@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#0a0a0a" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
@@ -13,12 +13,19 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Pimu</title>
     <script>
-      // Follow the OS color scheme (shadcn's dark variant keys off .dark).
+      // Theme: localStorage "pimu-theme" = light | dark | system (default). shadcn's dark variant keys off .dark.
       ;(function () {
         var mq = matchMedia('(prefers-color-scheme: dark)')
-        var set = function () { document.documentElement.classList.toggle('dark', mq.matches) }
+        var set = function () {
+          var t = localStorage.getItem('pimu-theme') || 'system'
+          var dark = t === 'dark' || (t === 'system' && mq.matches)
+          document.documentElement.classList.toggle('dark', dark)
+          var m = document.querySelector('meta[name=theme-color]')
+          if (m) m.setAttribute('content', dark ? '#16161c' : '#fbfaf8')
+        }
         set()
         mq.addEventListener('change', set)
+        window.addEventListener('pimu-theme', set)
       })()
     </script>
   </head>
