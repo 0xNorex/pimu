@@ -62,13 +62,16 @@ type Hub struct {
 	streams map[string]*Stream
 	known   map[string]string // id -> cwd, sessions created here that may have no file yet
 
+	// Global carries cross-session events (proc_state with id, run_update) for /api/events.
+	Global *Stream
+
 	modelsMu sync.Mutex
 	models   json.RawMessage
 	modelsAt time.Time
 }
 
 func New(cfg *config.Config) *Hub {
-	return &Hub{cfg: cfg, Idx: sessions.NewIndex(cfg.SessionDir), runs: map[string]*Run{}, streams: map[string]*Stream{}, known: map[string]string{}}
+	return &Hub{cfg: cfg, Idx: sessions.NewIndex(cfg.SessionDir), runs: map[string]*Run{}, streams: map[string]*Stream{}, known: map[string]string{}, Global: newStream()}
 }
 
 // Stream returns the event stream for id, creating it if needed.
@@ -122,7 +125,11 @@ func newID() string {
 
 // Create starts a new pi session in cwd and returns its id.
 func (h *Hub) Create(ctx context.Context, cwd string) (*Run, error) {
-	id := newID()
+	return h.CreateWithID(ctx, newID(), cwd)
+}
+
+// CreateWithID starts a brand-new session with a caller-chosen id (task runs).
+func (h *Hub) CreateWithID(ctx context.Context, id, cwd string) (*Run, error) {
 	h.mu.Lock()
 	h.known[id] = cwd
 	h.mu.Unlock()
@@ -206,6 +213,7 @@ func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Ru
 	r.file = st.SessionFile
 	r.mu.Unlock()
 	pimuEvent(stream, map[string]any{"type": "proc_state", "state": "ready"})
+	h.Broadcast(map[string]any{"type": "proc_state", "id": id, "state": "ready"})
 	return r, nil
 }
 
@@ -219,11 +227,13 @@ func (h *Hub) onEvent(r *Run, s *Stream, line []byte) {
 		r.mu.Lock()
 		r.streaming = true
 		r.mu.Unlock()
+		h.Broadcast(map[string]any{"type": "proc_state", "id": r.ID, "state": "streaming"})
 	case "agent_settled":
 		r.mu.Lock()
 		r.streaming = false
 		r.lastActive = time.Now()
 		r.mu.Unlock()
+		h.Broadcast(map[string]any{"type": "proc_state", "id": r.ID, "state": "ready"})
 	}
 	s.publish("pi", line)
 }
@@ -244,7 +254,14 @@ func (h *Hub) watch(r *Run, s *Stream) {
 	}
 	pimuEvent(s, ev)
 	pimuEvent(s, map[string]any{"type": "lock", "holder": "none"})
+	h.Broadcast(map[string]any{"type": "proc_state", "id": r.ID, "state": "exited", "code": code})
 }
+
+// Broadcast publishes a pimu event on the global stream.
+func (h *Hub) Broadcast(v any) { pimuEvent(h.Global, v) }
+
+// Done is closed when the run's pi process exits.
+func (r *Run) Done() <-chan struct{} { return r.proc.Done() }
 
 func pimuEvent(s *Stream, v any) {
 	b, _ := json.Marshal(v)
