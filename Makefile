@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 AGENT_DIR ?= $(or $(PI_CODING_AGENT_DIR),$(HOME)/.pi/agent)
 
-.PHONY: build web check install-guard install-agent install
+.PHONY: build web check e2e install-guard install-agent install
 
 build: web
 	go build -ldflags "-s -w -X main.version=$(VERSION)" -o bin/pimu ./cmd/pimu
@@ -11,6 +11,10 @@ web:
 
 check:
 	gofmt -l . | (! grep .) && go vet ./... && cd web && npx tsc -b --noEmit
+
+# Browser e2e against the real server + real pi + a scripted mock model (see e2e/run.sh).
+e2e:
+	e2e/run.sh
 
 install-guard:
 	mkdir -p $(AGENT_DIR)/extensions
