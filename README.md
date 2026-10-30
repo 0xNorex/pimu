@@ -81,11 +81,18 @@ A failed run is retried after 1 minute up to `maxRetries` extra times; runs cut
 off by a Pimu restart are marked `interrupted: pimu restarted` and retried the
 same way. Missed cron slots while Pimu was down are not backfilled.
 
-## Memory
+## Settings
 
-记忆 (`#/memory`) edits pi's global `~/.pi/agent/AGENTS.md`. Saves carry the
-file's mtime; if it changed elsewhere the save is refused (409) and nothing is
-overwritten.
+The settings page (`#/settings`, ⌘K jumps there too) is a view onto pi's own files. Pimu does not keep a copy of any of them.
+
+- **模型**: picks the default model and thinking level (`settings.json`: `defaultProvider`, `defaultModel`, `modelThinkingLevels`). Providers from `models.json` are read-only, and API keys and `!command` keys are masked.
+- **扩展**: toggles the built-in extensions (`-builtin:<name>` in `settings.extensions`). Lists the files in `~/.pi/agent/extensions/`, packages, and the commands extensions register.
+- **Skills**: shows skills and prompt templates as pi discovers them (`get_commands`). You can read each one's file.
+- **MCP**: lists the servers in `~/.pi/agent/mcp.json` with an `enabled` switch. 检测连接 runs `pi mcp list --json`. Env and header values are never sent to the browser.
+- **记忆**: edits the global `~/.pi/agent/AGENTS.md`. `#/memory` redirects here.
+- **Pimu**: theme (system/light/dark), Telegram status, versions, logout.
+
+Writes are small read-modify-write edits through temp file + rename. They carry the file's mtime, so an edit made elsewhere gives a 409 instead of being overwritten. Changes apply to new sessions.
 
 ## Browser (optional)
 
