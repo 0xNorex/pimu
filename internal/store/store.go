@@ -274,10 +274,10 @@ func (s *Store) Active(taskID int64) (bool, error) {
 
 // Bot is a pi session presented as an assistant. The conversation, model and
 // system prompt live in pi's session file; this row adds only what pi lacks.
+// The bots.emoji column is unused since avatars became identicons.
 type Bot struct {
 	SessionID   string `json:"id"`
 	Name        string `json:"name"`
-	Emoji       string `json:"emoji"`
 	Description string `json:"description"`
 	Persona     string `json:"persona"`
 	Cwd         string `json:"cwd"`
@@ -285,11 +285,11 @@ type Bot struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
-const botCols = `session_id, name, emoji, description, persona, cwd, archived, created_at`
+const botCols = `session_id, name, description, persona, cwd, archived, created_at`
 
 func scanBot(r scanner) (Bot, error) {
 	var b Bot
-	err := r.Scan(&b.SessionID, &b.Name, &b.Emoji, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.CreatedAt)
+	err := r.Scan(&b.SessionID, &b.Name, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -318,16 +318,16 @@ func (s *Store) Bot(id string) (Bot, error) {
 }
 
 func (s *Store) CreateBot(b Bot) (Bot, error) {
-	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, emoji, description, persona, cwd, archived) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		b.SessionID, b.Name, b.Emoji, b.Description, b.Persona, b.Cwd, b.Archived); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, description, persona, cwd, archived) VALUES (?, ?, ?, ?, ?, ?)`,
+		b.SessionID, b.Name, b.Description, b.Persona, b.Cwd, b.Archived); err != nil {
 		return Bot{}, err
 	}
 	return s.Bot(b.SessionID)
 }
 
 func (s *Store) UpdateBot(b Bot) (Bot, error) {
-	res, err := s.db.Exec(`UPDATE bots SET name=?, emoji=?, description=?, persona=?, cwd=?, archived=? WHERE session_id=?`,
-		b.Name, b.Emoji, b.Description, b.Persona, b.Cwd, b.Archived, b.SessionID)
+	res, err := s.db.Exec(`UPDATE bots SET name=?, description=?, persona=?, cwd=?, archived=? WHERE session_id=?`,
+		b.Name, b.Description, b.Persona, b.Cwd, b.Archived, b.SessionID)
 	if err != nil {
 		return Bot{}, err
 	}

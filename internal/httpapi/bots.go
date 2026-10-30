@@ -73,16 +73,13 @@ func (s *Server) botErr(w http.ResponseWriter, err error) {
 }
 
 func (s *Server) validBot(b *store.Bot) string {
-	b.Name, b.Emoji = strings.TrimSpace(b.Name), strings.TrimSpace(b.Emoji)
+	b.Name = strings.TrimSpace(b.Name)
 	b.Description, b.Persona = strings.TrimSpace(b.Description), strings.TrimSpace(b.Persona)
 	if b.Name == "" {
 		return "名字不能为空"
 	}
-	if b.Emoji == "" {
-		b.Emoji = "🤖"
-	}
-	if len([]rune(b.Name)) > 40 || len([]rune(b.Emoji)) > 8 || len([]rune(b.Description)) > 120 || len(b.Persona) > 16<<10 {
-		return "名字 ≤40 字、头像 ≤8 字符、简介 ≤120 字、人设 ≤16 KB"
+	if len([]rune(b.Name)) > 40 || len([]rune(b.Description)) > 120 || len(b.Persona) > 16<<10 {
+		return "名字 ≤40 字、简介 ≤120 字、人设 ≤16 KB"
 	}
 	cwd, ok := s.cfg.AllowedDir(b.Cwd)
 	if !ok {
@@ -92,7 +89,7 @@ func (s *Server) validBot(b *store.Bot) string {
 	return ""
 }
 
-// handleBotCreate makes a new bot (a fresh pi session id, started lazily on
+// handleBotCreate makes a new bot (every field optional) (a fresh pi session id, started lazily on
 // the first message) or adopts an existing session when sessionId is given.
 func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 	var body struct {
@@ -111,6 +108,13 @@ func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		b.SessionID, b.Cwd = info.ID, info.Cwd
+	}
+	if strings.TrimSpace(b.Name) == "" { // nothing to fill in: auto-name
+		n := 1
+		if all, err := s.st.Bots(); err == nil {
+			n = len(all) + 1
+		}
+		b.Name = fmt.Sprintf("助手 %d", n)
 	}
 	if b.Cwd == "" && len(s.cfg.Workdirs) > 0 {
 		b.Cwd = s.cfg.Workdirs[0]
