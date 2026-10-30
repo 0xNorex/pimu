@@ -27,6 +27,9 @@ import { Composer } from './Composer'
 import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
 import { MessageItem } from './MessageItem'
+
+// Consecutive thinking / tool rows sit closer together than prose.
+const STEP = new Set<string | undefined>(['thinking', 'tool', 'group'])
 import { newSession } from './BotList'
 import { ModelPicker, modelKey } from './ModelPicker'
 
@@ -283,8 +286,8 @@ export function ChatView({ id }: { id: string }) {
                   <p className="mt-1">{bot?.description || '发条消息开始。'}</p>
                 </div>
               )}
-              {items.map((it) => (
-                <div key={it.key} className="msg-in">
+              {items.map((it, i) => (
+                <div key={it.key} className={STEP.has(it.kind) && STEP.has(items[i - 1]?.kind) ? 'msg-in -mt-2' : 'msg-in'}>
                   <MessageItem item={it} />
                 </div>
               ))}

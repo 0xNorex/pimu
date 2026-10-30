@@ -19,12 +19,12 @@ const Md = memo(function Md({ text }: { text: string }) {
 function ThinkingBlock({ text, live }: { text: string; live: boolean }) {
   return (
     <Collapsible>
-      <CollapsibleTrigger className="group flex min-h-11 items-center gap-2 text-[13px] text-muted-foreground">
+      <CollapsibleTrigger className="group flex min-h-9 items-center gap-2 text-[13px] text-muted-foreground">
         <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none" />
         <BrainIcon className="size-4" />
         <span className={live ? 'shimmer' : undefined}>{live ? '思考中' : '思考'} · {text.length} 字</span>
       </CollapsibleTrigger>
-      <CollapsibleContent className="whitespace-pre-wrap border-l-2 pl-3 text-[13px] text-muted-foreground">{text}</CollapsibleContent>
+      <CollapsibleContent className="mb-1 ml-2 whitespace-pre-wrap border-l-2 pl-3 text-[13px] text-muted-foreground">{text}</CollapsibleContent>
     </Collapsible>
   )
 }
@@ -35,7 +35,7 @@ function ToolGroup({ tools }: { tools: ToolView[] }) {
   const [open, setOpen] = useState(hasError)
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 rounded-md px-1 text-left text-[13px] text-muted-foreground hover:bg-muted/60">
+      <CollapsibleTrigger className="flex min-h-9 w-full items-center gap-2 rounded-md px-1 text-left text-[13px] text-muted-foreground hover:bg-muted/60">
         <ChevronRightIcon className={`size-4 transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} />
         <LayersIcon className="size-4" />
         {tools.length} 个操作{running ? ' · 运行中' : ''}
