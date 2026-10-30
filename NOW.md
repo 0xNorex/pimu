@@ -1,6 +1,6 @@
 # NOW
 
-V1–V9 built, 2026-10-30.
+V1–V10 built, 2026-10-30. Next: dogfooding, no new features.
 
 - V1: Go server (pi RPC, lock, SSE replay, auth, reaper, `pimu release`), PWA chat.
 - V2: SQLite tasks/runs, cron/manual runs, retry, restart recovery, Telegram, memory page.
@@ -38,3 +38,7 @@ V1–V9 built, 2026-10-30.
   token in children; single-use, scoped, expiring approvals; stricter gate; `go test ./...`
   with a fake pi. Real-model checklist 8/8 passed on the box (skills loading and live
   nested tools not exercised). The P1 limits above are fixed; open risks are in docs/V9.md.
+- V10 (controlled autonomy, docs/V10.md): per-bot `mode` trusted (default) / guarded
+  (L2 gate on the main session, inline approvals, `pimu_task` still works); job
+  approval counts from Pimu records on the job card and in the result sent back.
+  Real-model checks passed on the box; streaming mode switch not exercised.
