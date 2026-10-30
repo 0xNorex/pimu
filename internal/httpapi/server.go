@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/0xNorex/pimu/internal/caps"
+	"github.com/0xNorex/pimu/internal/cfaccess"
 	"github.com/0xNorex/pimu/internal/config"
 	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/hub"
@@ -40,10 +41,15 @@ type Server struct {
 	version   string
 	piVersion string
 	limiter   *limiter
+	access    *cfaccess.Verifier // nil: Cloudflare Access checks off
 }
 
 func New(cfg *config.Config, h *hub.Hub, st *store.Store, tk *tasks.Service, gs *goals.Service, js *jobs.Service, version, piVersion string) *Server {
-	return &Server{cfg: cfg, hub: h, st: st, tasks: tk, goals: gs, jobs: js, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
+	s := &Server{cfg: cfg, hub: h, st: st, tasks: tk, goals: gs, jobs: js, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
+	if cfg.CFAccessTeam != "" {
+		s.access = cfaccess.New(cfg.CFAccessTeam, cfg.CFAccessAUD, cfg.CFAccessEmails)
+	}
+	return s
 }
 
 func (s *Server) Handler(static fs.FS) http.Handler {
@@ -119,7 +125,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.guard(api))
 	mux.Handle("/", staticHandler(static))
-	return logRequests(mux)
+	return logRequests(s.requireAccess(mux))
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {

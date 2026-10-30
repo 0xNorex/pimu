@@ -156,7 +156,7 @@ func serve() error {
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	slog.Info("pimu listening", "addr", cfg.Addr, "version", version, "pi", piVersion)
+	slog.Info("pimu listening", "addr", cfg.Addr, "version", version, "pi", piVersion, "cf_access", cfg.CFAccessTeam != "")
 	select {
 	case err := <-errc:
 		return err

@@ -27,6 +27,10 @@ type Config struct {
 	DataDir     string // pimu.db lives here
 	TGToken     string // Telegram bot token; empty disables notifications
 	TGChatID    string
+	// Cloudflare Access: both set turns on JWT checks for every request.
+	CFAccessTeam   string
+	CFAccessAUD    string
+	CFAccessEmails []string // optional allowlist: emails or service token client IDs
 }
 
 func env(k, def string) string {
@@ -54,6 +58,15 @@ func Load(requireToken bool) (*Config, error) {
 	}
 	c.DataDir = expand(env("PIMU_DATA_DIR", filepath.Join(home, ".local", "share", "pimu")), home)
 	c.TGToken, c.TGChatID = os.Getenv("PIMU_TELEGRAM_TOKEN"), env("PIMU_TELEGRAM_CHAT_ID", "")
+	c.CFAccessTeam, c.CFAccessAUD = env("PIMU_CF_ACCESS_TEAM", ""), env("PIMU_CF_ACCESS_AUD", "")
+	if (c.CFAccessTeam == "") != (c.CFAccessAUD == "") {
+		return nil, fmt.Errorf("set both PIMU_CF_ACCESS_TEAM and PIMU_CF_ACCESS_AUD, or neither")
+	}
+	for _, e := range strings.Split(env("PIMU_CF_ACCESS_EMAILS", ""), ",") {
+		if e = strings.TrimSpace(e); e != "" {
+			c.CFAccessEmails = append(c.CFAccessEmails, e)
+		}
+	}
 	c.SessionDir = expand(env("PI_CODING_AGENT_SESSION_DIR", filepath.Join(c.AgentDir, "sessions")), home)
 	if requireToken && len(c.Token) < 32 {
 		return nil, fmt.Errorf("PIMU_TOKEN must be at least 32 characters (try: openssl rand -hex 32)")

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -249,14 +250,22 @@ func (s *Server) handleGoalBeat(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]bool{"ok": true})
 }
 
-// handleGoalHook: POST /api/goals/{id}/hook?k=<secret>, body ≤64 KB. Dedup key:
-// X-GitHub-Delivery, then X-Pimu-Dedup, then sha256(body).
+// handleGoalHook: POST /api/goals/{id}/hook, body ≤64 KB, authenticated by
+// either ?k=<secret> or a signature header (X-Pimu-Signature or GitHub's
+// X-Hub-Signature-256) "sha256=" + hex(HMAC-SHA256(secret, body)). Behind
+// Cloudflare Access only signed hooks (or ones with a service token) get in.
+// Dedup key: X-GitHub-Delivery, then X-Pimu-Dedup, then sha256(body).
 func (s *Server) handleGoalHook(w http.ResponseWriter, r *http.Request) {
 	g, ok := s.goalOrErr(w, r)
 	if !ok {
 		return
 	}
-	if subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("k")), []byte(g.HookSecret)) != 1 {
+	sig := hookSignature(r)
+	if g.HookSecret == "" {
+		writeErr(w, 403, "forbidden", "hook disabled")
+		return
+	}
+	if sig == "" && subtle.ConstantTimeCompare([]byte(r.URL.Query().Get("k")), []byte(g.HookSecret)) != 1 {
 		writeErr(w, 403, "forbidden", "bad hook secret")
 		return
 	}
@@ -264,6 +273,14 @@ func (s *Server) handleGoalHook(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeErr(w, 413, "too_large", "body > 64 KB")
 		return
+	}
+	if sig != "" {
+		m := hmac.New(sha256.New, []byte(g.HookSecret))
+		m.Write(body)
+		if !hmac.Equal([]byte(sig), []byte("sha256="+hex.EncodeToString(m.Sum(nil)))) {
+			writeErr(w, 403, "forbidden", "bad hook signature")
+			return
+		}
 	}
 	key := r.Header.Get("X-GitHub-Delivery")
 	if key == "" {
