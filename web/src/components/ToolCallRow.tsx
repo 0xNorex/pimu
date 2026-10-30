@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckIcon, ChevronRightIcon, Loader2Icon, TerminalIcon, WrenchIcon, XIcon } from 'lucide-react'
+import { CheckIcon, ChevronRightIcon, GlobeIcon, Loader2Icon, TerminalIcon, WrenchIcon, XIcon } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -33,7 +33,7 @@ function ResultText({ text }: { text: string }) {
   )
 }
 
-function Thumb({ img }: { img: ImageBlock }) {
+export function Thumb({ img }: { img: ImageBlock }) {
   const src = `data:${img.mimeType};base64,${img.data}`
   return (
     <Dialog>
@@ -42,9 +42,9 @@ function Thumb({ img }: { img: ImageBlock }) {
           <img src={src} alt="工具结果缩略图" className="h-24 rounded border object-cover" />
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-[95vw] p-2">
+      <DialogContent className="w-auto max-w-[95vw] p-2 sm:max-w-[95vw]">
         <DialogTitle className="sr-only">图片</DialogTitle>
-        <img src={src} alt="工具结果图片" className="max-h-[85dvh] w-full object-contain" />
+        <img src={src} alt="工具结果图片" className="max-h-[85dvh] max-w-full object-contain" />
       </DialogContent>
     </Dialog>
   )
@@ -63,13 +63,14 @@ export function ToolCallRow({ tool }: { tool: ToolView }) {
     setSeenError(true)
     setOpen(true)
   }
-  const Icon = tool.call.name === 'bash' ? TerminalIcon : WrenchIcon
+  const browser = tool.call.name.startsWith('mcp__playwright__')
+  const Icon = tool.call.name === 'bash' ? TerminalIcon : browser ? GlobeIcon : WrenchIcon
   return (
     <Collapsible open={open} onOpenChange={setOpen} id={`tool-${tool.call.id}`} className="scroll-mt-16">
       <CollapsibleTrigger className="flex min-h-11 w-full items-center gap-2 rounded-md px-1 text-left font-mono text-[13px] hover:bg-muted/60">
         <ChevronRightIcon className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} />
         <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="shrink-0 font-medium">{tool.call.name}</span>
+        <span className="shrink-0 font-medium">{browser ? tool.call.name.slice(17) : tool.call.name}</span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{toolSummary(tool.call)}</span>
         <span className="shrink-0 text-xs text-muted-foreground">{fmtMs(tool.durationMs)}</span>
         <StatusIcon status={tool.status} />
