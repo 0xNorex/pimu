@@ -46,9 +46,33 @@ Open the URL, paste the token. On iPhone: Safari → Share → Add to Home Scree
 | `PIMU_DATA_DIR` | `~/.local/share/pimu` | holds `pimu.db` (tasks + runs only) |
 | `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → task run notifications via Bot API |
 
+## Bots
+
+The home screen is a list of bots, like a messaging app of your assistants.
+A bot **is** a pi session: the conversation, model, thinking level and system
+prompt live in pi's session file. Pimu's SQLite `bots` table keeps only what pi
+cannot: emoji, one-line description, persona text, cwd, archived (and the name,
+because pi does not write a session file until the first message).
+
+- Persona is passed as `--append-system-prompt` every time pi starts for that
+  session; pi records it as a system section in the session file. Editing the
+  persona releases an idle process so the next message uses the new one.
+- Name goes to pi as `--name` (and `set_session_name` when running).
+- Long chats rely on pi's own auto-compaction (on by default; see pi
+  `docs/compaction.md`). Pimu adds nothing.
+- Raw pi sessions that are not bots sit under 其他会话 and can be adopted
+  (菜单 → 设为 Bot). Task-run sessions (`pimu-t*`) are hidden from the home list.
+- Composer: 📎 images go to the model as prompt images (a text-only model ignores
+  them; the UI warns). Other files are uploaded (≤25 MB, sanitized names) to
+  `<cwd>/.pimu/uploads/<session>/` and their path is added to the message, so pi
+  reads them with its own tools. Paste and drag-drop work too. 🎤 uses the
+  browser Web Speech API (zh-CN); the button is hidden where unsupported.
+
 ## Tasks
 
-任务 (`#/tasks`) runs a prompt in a fresh pi session (`pimu-t<task>-r<run>`) on a
+任务 (`#/tasks`) runs a prompt inside a bot (its output lands in that bot's chat
+and its 任务 tab; skipped as failed while the bot is replying) or in a fresh pi
+session (`pimu-t<task>-r<run>`) on a
 5-field cron schedule (server local time) or on 立即运行. Each run records
 status, the last assistant text as summary, and links to its session.
 A failed run is retried after 1 minute up to `maxRetries` extra times; runs cut
