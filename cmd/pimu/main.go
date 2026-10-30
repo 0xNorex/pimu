@@ -130,6 +130,8 @@ func serve() error {
 		if err != nil {
 			return "", args, env, false
 		}
+		// Bot sessions live in Pimu's data dir, not pi's (docs/DESIGN.md).
+		args = append(args, "--session-dir", h.BotSessionDir(id))
 		if b.Persona != "" {
 			args = append(args, "--append-system-prompt", b.Persona)
 		}
@@ -148,6 +150,7 @@ func serve() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go h.Reap(ctx)
+	go moveBotSessions(ctx, st, h)
 	if err := tk.Start(ctx); err != nil {
 		return fmt.Errorf("tasks: %w", err)
 	}
@@ -169,6 +172,31 @@ func serve() error {
 	tk.Stop()
 	h.Shutdown()
 	return nil
+}
+
+// moveBotSessions moves bot session files into the bots dir at start and then
+// every minute, which picks up bots that were busy (streaming, or open in
+// a terminal pi) the last time.
+func moveBotSessions(ctx context.Context, st *store.Store, h *hub.Hub) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		bots, err := st.Bots()
+		if err != nil {
+			slog.Error("bot sessions", "err", err)
+		}
+		for _, b := range bots {
+			// Busy (streaming, or a terminal pi holds it): next round.
+			if _, err := h.MoveToBotDir(b.SessionID); err != nil && !errors.Is(err, hub.ErrStreaming) && !errors.Is(err, hub.ErrLocked) {
+				slog.Warn("move bot session", "session", b.SessionID, "err", err)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // release asks the running server to free a session.

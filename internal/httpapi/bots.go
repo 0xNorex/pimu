@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -135,6 +136,10 @@ func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		s.botErr(w, err)
 		return
+	}
+	// Into the bots dir now if idle; a busy session is moved by the periodic sweep.
+	if _, err := s.hub.MoveToBotDir(b.SessionID); err != nil {
+		slog.Info("bot session not moved yet", "session", b.SessionID, "err", err)
 	}
 	writeJSON(w, 200, map[string]any{"bot": s.botOut(b, s.infos())})
 }

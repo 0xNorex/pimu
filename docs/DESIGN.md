@@ -255,10 +255,24 @@ data: {"type":"proc_state","state":"ready"}
 
 ### 4.5 只读解析会话 JSONL（`internal/sessions`）
 
-- 列表：`<agent-dir>/sessions/*/*.jsonl`（或 `PI_CODING_AGENT_SESSION_DIR`）。读首行 header（`id,cwd,timestamp`），扫描最后一个 `session_info.name`、第一条 `role:user` 文本（截 80 字）作 preview。按 mtime 缓存。
+- 列表：`<agent-dir>/sessions/*/*.jsonl`（或 `PI_CODING_AGENT_SESSION_DIR`），外加 Bot 会话 `<data-dir>/bots/*/session/*.jsonl`（见 4.5A）。读首行 header（`id,cwd,timestamp`），扫描最后一个 `session_info.name`、第一条 `role:user` 文本（截 80 字）作 preview。按 mtime 缓存。
 - 消息：取文件最后一个带 `id` 的条目为 leaf，沿 `parentId` 回溯到根得到当前分支，输出其中 `type:"message"` 且 role ∈ {user, assistant, toolResult} 的条目。**【不确定】** “最后一行即 leaf”在 `/tree` 跳转后可能不成立；运行中一律以 `get_messages` 为准。
 - 单行上限 16MB；解析失败的行跳过并记 warn。
-- 绝不写、不改名、不删除会话文件。
+- 绝不写、不删除会话文件；唯一例外是 4.5A 的 Bot 会话迁移（复制 + 原文件改名备份）。
+
+### 4.5A Bot 会话单独存放（V14）
+
+```
+~/.local/share/pimu/bots/<bot-id>/
+  session/<ts>_<bot-id>.jsonl   # pi 会话文件（pi --session-dir 指到这里）
+  goals/<slug>/                 # 长期目标文件
+```
+
+- 「会话文件放哪」与「工作目录」分开：pi 1.4 的 `--session-dir` 只决定文件位置（平铺 `<dir>/<ts>_<id>.jsonl`，无 cwd 子目录）；工作目录仍是 Bot 的 cwd（进程 cwd，写在文件 header 里），用户可选。
+- 启动 Bot 的 pi 时追加 `--session-dir <bots/<id>/session>`；文件已存在时 hub 照旧传 `--session <path>`（优先于 `--session-dir`）。
+- 迁移（`hub.MoveToBotDir`）：设为 Bot 时立即做一次，另有启动时 + 每分钟一次的扫描补上当时忙的 Bot。步骤：正在回复 → 跳过；空闲运行 → 先关进程；拿会话锁（终端里 pi 正占用 → 跳过）；复制到 `.tmp`、fsync、rename 进 Bot 目录；原文件改名为 `<原名>.jsonl.pimu-moved` 作备份（不再被 pi/Pimu 列出）。备份确认无用后可手动删除。
+- 取消 Bot：文件留在 Bot 目录，仍被索引，出现在「会话」标签页，下次以 `--session <path>` 打开。
+- 代价：Bot 会话不再出现在终端 `pi -r` / `pi -c` 的列表里；需要时 `pi --session <path>` 直接打开。
 
 ### 4.6 鉴权与安全
 

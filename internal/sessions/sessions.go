@@ -34,18 +34,25 @@ type cached struct {
 	info Info
 }
 
-// Index scans a session directory, caching parsed headers by mtime+size.
+// Index scans pi's session directory (<dir>/<cwd-slug>/*.jsonl) plus any extra
+// glob patterns, caching parsed headers by mtime+size.
 type Index struct {
-	dir   string
+	globs []string
 	mu    sync.Mutex
 	cache map[string]cached
 }
 
-func NewIndex(dir string) *Index { return &Index{dir: dir, cache: map[string]cached{}} }
+func NewIndex(dir string, extra ...string) *Index {
+	return &Index{globs: append([]string{filepath.Join(dir, "*", "*.jsonl")}, extra...), cache: map[string]cached{}}
+}
 
 // List returns all sessions, newest first.
 func (x *Index) List() []Info {
-	paths, _ := filepath.Glob(filepath.Join(x.dir, "*", "*.jsonl"))
+	var paths []string
+	for _, g := range x.globs {
+		m, _ := filepath.Glob(g)
+		paths = append(paths, m...)
+	}
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	seen := map[string]bool{}

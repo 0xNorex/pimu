@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -79,7 +80,7 @@ type Hub struct {
 }
 
 func New(cfg *config.Config) *Hub {
-	return &Hub{cfg: cfg, Idx: sessions.NewIndex(cfg.SessionDir), runs: map[string]*Run{}, streams: map[string]*Stream{}, known: map[string]string{}, Global: newStream()}
+	return &Hub{cfg: cfg, Idx: sessions.NewIndex(cfg.SessionDir, filepath.Join(cfg.DataDir, "bots", "*", "session", "*.jsonl")), runs: map[string]*Run{}, streams: map[string]*Stream{}, known: map[string]string{}, Global: newStream()}
 }
 
 // Stream returns the event stream for id, creating it if needed.
