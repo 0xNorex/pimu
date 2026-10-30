@@ -259,7 +259,7 @@ func (s *Store) Item(id int64) (Item, error) {
 func (s *Store) Items(botID string, open bool, limit int) ([]Item, error) {
 	q := `SELECT ` + itemCols + itemFrom + ` WHERE (? = '' OR g.bot_id = ?)`
 	if open {
-		q += ` AND i.status IN ('new','read')`
+		q += ` AND (i.status = 'new' OR (i.status = 'read' AND i.kind != 'notify'))`
 	}
 	rows, err := s.db.Query(q+` ORDER BY i.id DESC LIMIT ?`, botID, botID, limit)
 	if err != nil {
