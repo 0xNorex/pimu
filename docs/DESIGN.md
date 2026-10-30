@@ -179,7 +179,7 @@ pimu/
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `PIMU_ADDR` | `127.0.0.1:7777` | 监听地址；非 loopback 时启动打印警告 |
-| `PIMU_TOKEN` | 必填，≥32 字符 | 登录口令 + cookie HMAC 密钥 |
+| `PIMU_TOKEN` | ≥32 字符；配置了 Cloudflare Access 时可不填（两者至少一个） | 登录口令 + cookie HMAC 密钥 |
 | `PIMU_PUBLIC_URL` | 空 | 如 `https://pimu.example.com`；用于 Origin 校验、cookie `Secure`、通知链接 |
 | `PIMU_PI_BIN` | `pi` | systemd 下建议绝对路径 |
 | `PIMU_PI_ARGS` | 空 | 追加给 pi 的参数，空格分隔 |
@@ -264,7 +264,7 @@ data: {"type":"proc_state","state":"ready"}
 
 - 登录：`POST /api/login {token}`，`subtle.ConstantTimeCompare`。成功设 cookie `pimu=<expiry>.<HMAC-SHA256(PIMU_TOKEN, expiry)>`，`HttpOnly; SameSite=Strict; Path=/; Max-Age=30d`，`Secure`（PUBLIC_URL 为 https 时）。也接受 `Authorization: Bearer <PIMU_TOKEN>`（curl/脚本用）。
 - CSRF：SameSite=Strict + 所有 POST/PATCH/PUT/DELETE 要求 `Content-Type: application/json` + 若设置了 `PUBLIC_URL` 则校验 `Origin`。
-- Cloudflare：`cloudflared` 隧道指向 `http://127.0.0.1:7777`；Access 应用策略仅允许本人邮箱（OTP），会话时长设 1 个月（减少 iOS PWA 反复登录）。Pimu 不校验 `Cf-Access-Jwt-Assertion`（需 JWKS/JWT 依赖，YAGNI；靠只监听 loopback 保证流量只能来自隧道）。
+- Cloudflare：`cloudflared` 隧道指向 `http://127.0.0.1:7777`；Access 应用策略仅允许本人邮箱（OTP），会话时长设 1 个月（减少 iOS PWA 反复登录）。（后来改为：Pimu 自己校验 `Cf-Access-Jwt-Assertion`，Access JWT 与 token 二选一即可登录，见 DEPLOY.md。）
 - `PIMU_WORKDIRS` 校验所有 cwd（`filepath.Clean` + 前缀判断 + `EvalSymlinks`）。
 - 不暴露任何读写任意文件的 API。pi 本身拥有该 OS 用户全部权限（官方 security.md），建议跑在专用用户/VPS 上。
 - 项目信任：RPC 无法弹出信任提示；未决时按 `defaultProjectTrust` 处理。需要加载项目 `.pi/` 时在 `PIMU_PI_ARGS` 加 `--approve`（自担风险）。

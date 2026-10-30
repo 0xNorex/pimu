@@ -56,7 +56,7 @@ make build                      # = (cd web && npm ci && npm run build) && go bu
 make install-guard install-agent  # copy the two pi extensions to ~/.pi/agent/extensions/
 
 # 3. run
-export PIMU_TOKEN=$(openssl rand -hex 32)   # your login password, ≥ 32 chars
+export PIMU_TOKEN=$(openssl rand -hex 32)   # your login password, ≥ 32 chars (or use Cloudflare Access)
 ./bin/pimu serve                            # http://127.0.0.1:7777
 ```
 
@@ -67,16 +67,16 @@ For an always-on box, see [Deploy](#deploy) and [docs/DEPLOY.md](docs/DEPLOY.md)
 
 | env | default | |
 |---|---|---|
-| `PIMU_TOKEN` | – | required, ≥ 32 chars |
+| `PIMU_TOKEN` | – | token login, ≥ 32 chars; optional when Cloudflare Access is set (at least one is required) |
 | `PIMU_ADDR` | `127.0.0.1:7777` | keep loopback; expose through a tunnel |
 | `PIMU_PUBLIC_URL` | – | e.g. `https://pimu.example.com`; enables Origin check + Secure cookie |
-| `PIMU_WORKDIRS` | `$HOME` | comma-separated dirs where sessions may run |
+| `PIMU_WORKDIRS` | `$HOME` | comma-separated roots where sessions may run (subdirs included); the first is the default for new sessions |
 | `PIMU_DATA_DIR` | `~/.local/share/pimu` | `pimu.db` and per-bot data |
 | `PIMU_MAX_PROCS` | `3` | concurrent pi processes (≈120 MB each) |
 | `PIMU_MAX_JOBS` | `1` | background jobs at once; the rest queue |
 | `PIMU_IDLE_TIMEOUT` | `10m` | idle pi processes are stopped |
 | `PIMU_PI_BIN` / `PIMU_PI_ARGS` | `pi` / – | pi binary and extra args |
-| `PIMU_CF_ACCESS_TEAM` / `PIMU_CF_ACCESS_AUD` | – | both set → every request needs a valid Cloudflare Access JWT ([DEPLOY](docs/DEPLOY.md)) |
+| `PIMU_CF_ACCESS_TEAM` / `PIMU_CF_ACCESS_AUD` | – | both set → a valid Cloudflare Access JWT logs you in, no token screen; the token (if set) still works ([DEPLOY](docs/DEPLOY.md)) |
 | `PIMU_CF_ACCESS_EMAILS` | – | optional comma-separated allowlist for the JWT's email / service-token ID |
 | `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → notifications via Telegram |
 | `PIMU_LOG_LEVEL` | `info` | `debug` also logs pi stderr |

@@ -76,11 +76,32 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
 - Cloudflare Access JWT check in Pimu (`internal/cfaccess`, stdlib only): RS256,
   `iss`, `aud`, `exp`/`nbf` (60 s skew), JWKS cache refetched on an unknown `kid`
   (rate-limited), optional email allowlist; header or `CF_Authorization` cookie.
-  Pimu's own token login stays as the second factor.
+  (V13: Access or token, either one logs you in.)
 - Webhooks accept `X-Pimu-Signature` / `X-Hub-Signature-256` (HMAC-SHA256 of the
-  body with the hook secret); with Access on, `?k=` alone needs a service token.
+  body with the hook secret) as well as `?k=`.
 - System unit for a `pimu` user with systemd sandboxing, cloudflared template,
   [DEPLOY.md](DEPLOY.md).
+
+## V13 directory picker, either/or login, polish
+
+- Root cause of "cwd 不在 PIMU_WORKDIRS 允许范围内": the web app creates sessions with
+  an empty cwd, which the server resolved with `filepath.Abs("")`, i.e. the process's
+  working directory (`/` under systemd, or wherever `pimu serve` was started), not
+  `$HOME`. Empty now means the first `PIMU_WORKDIRS` entry, and `/new` goes through
+  the picker instead of reusing a cwd that may lie outside the roots.
+- Login: Cloudflare Access JWT **or** Pimu token. `PIMU_TOKEN` is optional when Access
+  is configured; Pimu refuses to start with neither. `/api/auth/status` lets the web
+  app skip the token screen; 退出登录 is hidden for Access sessions.
+- New-session dialog with `GET/POST /api/dirs` (symlink-resolved, inside the roots,
+  hidden dirs skipped, mkdir of one plain name).
+- Overlay scrollbars (Radix ScrollArea) for the sidebar, chat, tabs, settings, inbox
+  and tasks; thin `scrollbar-width` elsewhere.
+- Info-level extension notifications ("… loaded") no longer toast; warnings and errors
+  are deduplicated. Toasts sit bottom-right on desktop, under the header on phones.
+- Sidebar: no greeting, two header buttons (inbox, new session), 任务/设置 in a footer,
+  folder-name group headers without counts. All page headers 56 px, underline tab
+  strips for chat, task detail and settings, model names without the price multiplier,
+  provider error JSON collapsed behind 原始信息.
 
 ## Open risks and not verified
 

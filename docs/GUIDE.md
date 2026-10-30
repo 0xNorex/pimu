@@ -4,15 +4,18 @@ Detailed reference for using Pimu. Start with the [README](../README.md).
 
 ## Sessions and bots
 
-Sessions come first. **+** always opens a new pi session (pick a directory when
-`PIMU_WORKDIRS` lists several); there is no "new bot" form. A bot is just a
+Sessions come first. The new-session button (and `/new`) opens a directory
+picker: the `PIMU_WORKDIRS` roots and recent cwds, subfolders to click into, a
+path field (`~` works) and 新建文件夹. Everything stays inside the roots; a cwd
+outside them shows one note and falls back to the default. There is no "new
+bot" form. A bot is just a
 session you marked as long-lived: open any session → 菜单 → **设为 Bot** (name
 optional, defaults to the session title or first message; avatar is an
 identicon of the session id). **取消 Bot** drops only the bot metadata (name,
 persona, goals); the pi session file and the conversation stay.
 
 Home list: bots pinned on top (busy, then unread, then newest), then every
-other session expanded and grouped by working directory (`~/proj/x` headers),
+other session expanded and grouped by working directory (folder-name headers; 主目录 for `$HOME`),
 including sessions you started with `pi` in a terminal (marked with a terminal
 icon). Task runs (`pimu-t*`), heartbeats (`pimu-g*`) and background jobs
 (`pimu-j*`) are hidden there and shown under their task, goal or bot. Session ids stay in 详情, not in the list.

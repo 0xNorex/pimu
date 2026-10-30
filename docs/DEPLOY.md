@@ -3,7 +3,9 @@
 A hardened setup for a small VPS (2 vCPU / 3 GB is enough): Pimu runs as an
 unprivileged `pimu` user under systemd, listens on loopback only, and is reached
 through a Cloudflare Tunnel guarded by Cloudflare Access. Pimu verifies the
-Access JWT itself, and its own token login stays on as a second factor.
+Access JWT itself; a browser that passed Access goes straight in, no Pimu token
+screen. `PIMU_TOKEN` is optional and only adds a second way in (scripts, `curl`,
+`pimu release`).
 
 Placeholders: `pimu.example.com` (your hostname), `myteam` (your Zero Trust team
 name), `<AUD>` (the Access application's AUD tag).
@@ -55,7 +57,7 @@ sudo find /home/pimu/.pi/agent -maxdepth 1 -type f -exec chmod 600 {} +
 `/home/pimu/.config/pimu/env`, owner `pimu`, mode `600`:
 
 ```bash
-PIMU_TOKEN=<openssl rand -hex 32>        # Pimu login, second factor
+#PIMU_TOKEN=<openssl rand -hex 32>       # optional: token login for scripts / curl
 PIMU_PUBLIC_URL=https://pimu.example.com
 PIMU_ADDR=127.0.0.1:7777
 PIMU_WORKDIRS=/home/pimu/work
@@ -71,22 +73,30 @@ PIMU_CF_ACCESS_AUD=<AUD>
 sudo chown pimu:pimu /home/pimu/.config/pimu/env && sudo chmod 600 /home/pimu/.config/pimu/env
 ```
 
-With `PIMU_CF_ACCESS_TEAM` + `PIMU_CF_ACCESS_AUD` set (both or neither), every
-request must carry a valid `Cf-Access-Jwt-Assertion` header (or the
-`CF_Authorization` cookie): RS256, signed by a key from
+Login is either/or: a request is in if it carries a valid Access JWT **or** the
+Pimu token (cookie from the login screen, or `Authorization: Bearer`). Pimu
+refuses to start with neither configured. `GET /api/auth/status` tells the web
+app which one applies, so it skips the token screen behind Access.
+
+With `PIMU_CF_ACCESS_TEAM` + `PIMU_CF_ACCESS_AUD` set (both or neither), the JWT
+is read from the `Cf-Access-Jwt-Assertion` header (or the `CF_Authorization`
+cookie) and checked: RS256, signed by a key from
 `https://myteam.cloudflareaccess.com/cdn-cgi/access/certs` (cached, refetched on
 an unknown `kid`, at most every 30 s), `iss` = team domain, `aud` contains
-`<AUD>`, `exp`/`nbf` within 60 s. Failures get `403 access_denied` and a warning
-in the log. Exceptions: `/api/health` and the internal API from loopback (not
-via the tunnel), and webhooks that carry an HMAC signature (see §6). Unset =
-off, for local use.
+`<AUD>`, `exp`/`nbf` within 60 s. A rejected JWT logs a warning and the request
+falls back to the token check (401 if that fails too). Unset = off, for local use.
+
+`PIMU_WORKDIRS` defaults to `$HOME`; an empty cwd (the web app's default) means
+its first entry, never the process's working directory. The 新会话 dialog lists
+those roots plus recent cwds, browses subdirectories and can create one
+(`GET/POST /api/dirs`, resolved with symlinks and kept inside the roots).
 
 ## 4. systemd
 
 ```bash
 sudo install -m644 deploy/pimu.service /etc/systemd/system/pimu.service
 sudo systemctl daemon-reload && sudo systemctl enable --now pimu
-journalctl -u pimu -f            # expect: pimu listening ... cf_access=true
+journalctl -u pimu -f            # expect: pimu listening ... cf_access=true token_login=false
 ```
 
 [`deploy/pimu.service`](../deploy/pimu.service) runs as `pimu` with
@@ -130,12 +140,12 @@ Zero Trust → Access → Applications → Add → Self-hosted:
 - **Service token** (recommended for your own scripts): Access → Service
   credentials → create a token; add a second policy *Service Auth* (Include →
   Service Token) to the **same** application, so the JWT has the same AUD. The
-  caller sends `CF-Access-Client-Id` / `CF-Access-Client-Secret` plus the
+  caller sends `CF-Access-Client-Id` / `CF-Access-Client-Secret` to the
   hook's `?k=` URL. If you set `PIMU_CF_ACCESS_EMAILS`, add the client ID there.
 - **Bypass + HMAC** (for GitHub and other third parties): a second application
-  on path `pimu.example.com/api/goals/*/hook` with a *Bypass* policy. Pimu then
-  accepts only signed requests (`?k=` alone is refused while Access is on):
-  header `X-Pimu-Signature` or GitHub's `X-Hub-Signature-256`, value
+  on path `pimu.example.com/api/goals/*/hook` with a *Bypass* policy. The hook
+  then accepts the `?k=` URL or, better (the key stays out of URLs and logs), a
+  signature: header `X-Pimu-Signature` or GitHub's `X-Hub-Signature-256`, value
   `sha256=<hex HMAC-SHA256(secret, raw body)>`, where the secret is the `k` of
   the hook URL.
 
