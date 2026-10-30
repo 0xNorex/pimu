@@ -23,6 +23,8 @@ type Info struct {
 	Cwd       string    `json:"cwd"`
 	Name      string    `json:"name,omitempty"`
 	Preview   string    `json:"preview,omitempty"`
+	Last      string    `json:"last,omitempty"`     // last user/assistant text
+	LastRole  string    `json:"lastRole,omitempty"` // "user" | "assistant"
 	UpdatedAt time.Time `json:"updatedAt"`
 }
 
@@ -145,11 +147,16 @@ func parseInfo(path string) (Info, error) {
 				info.Name = *e.Name
 			}
 		case "message":
-			if info.Preview == "" {
-				var m message
-				if json.Unmarshal(e.Message, &m) == nil && m.Role == "user" {
-					info.Preview = truncate(text(m.Content), 80)
-				}
+			var m message
+			if json.Unmarshal(e.Message, &m) != nil || (m.Role != "user" && m.Role != "assistant") {
+				return
+			}
+			t := text(m.Content)
+			if info.Preview == "" && m.Role == "user" {
+				info.Preview = truncate(t, 80)
+			}
+			if strings.TrimSpace(t) != "" {
+				info.Last, info.LastRole = truncate(t, 80), m.Role
 			}
 		}
 	})
