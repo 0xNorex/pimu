@@ -26,6 +26,7 @@ import { Composer } from './Composer'
 import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
 import { MessageItem } from './MessageItem'
+import { newSession } from './BotList'
 import { ModelPicker } from './ModelPicker'
 
 function useElapsed(since: number | null) {
@@ -131,6 +132,83 @@ export function ChatView({ id }: { id: string }) {
     } catch (e) {
       toast.error(errMsg(e))
     }
+  }
+  // Built-in slash commands (lib/slash.ts); true = handled, clear the composer.
+  const command = async (name: string, arg: string): Promise<boolean> => {
+    const run = async <T,>(label: string, p: Promise<T>, done: (r: T) => string | [string, string]) => {
+      const t = toast.loading(label)
+      try {
+        const out = done(await p)
+        const [title, description] = typeof out === 'string' ? [out, undefined] : out
+        toast.success(title, { id: t, description })
+        return true
+      } catch (e) {
+        toast.error(errMsg(e), { id: t })
+        return false
+      }
+    }
+    const k = (n?: number) => (n === undefined ? '?' : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n))
+    switch (name) {
+      case 'compact':
+        return run('正在压缩上下文…', api<{ tokensBefore?: number; estimatedTokensAfter?: number }>(`/api/sessions/${id}/compact`, arg ? { customInstructions: arg } : {}), (r) => {
+          refreshDetail()
+          return [`已压缩`, `${k(r.tokensBefore)} → 约 ${k(r.estimatedTokensAfter)} tokens`]
+        })
+      case 'session':
+        return run('读取统计…', api<{ userMessages: number; assistantMessages: number; toolCalls: number; tokens: { total: number }; cost: number; contextUsage?: { tokens: number; contextWindow: number; percent: number } }>(`/api/sessions/${id}/stats`), (r) => [
+          '会话统计',
+          `消息 ${r.userMessages}↑ ${r.assistantMessages}↓ · 工具 ${r.toolCalls} · 累计 ${k(r.tokens.total)} tokens · $${r.cost.toFixed(3)}${r.contextUsage?.tokens != null ? ` · 上下文 ${k(r.contextUsage.tokens)} / ${k(r.contextUsage.contextWindow)}（${Math.round(r.contextUsage.percent)}%）` : ''}`,
+        ])
+      case 'export':
+        return run('正在导出…', api<{ path: string }>(`/api/sessions/${id}/export`, arg ? { outputPath: arg } : {}), (r) => ['已导出 HTML', r.path])
+      case 'copy':
+        return run('复制中…', api<{ text: string | null }>(`/api/sessions/${id}/last-text`), (r) => {
+          if (!r.text) throw new Error('还没有回复可复制')
+          void navigator.clipboard.writeText(r.text)
+          return '已复制最后一条回复'
+        })
+      case 'model': {
+        const [provider, modelId] = arg.split('/')
+        if (!arg || !modelId) {
+          setSettings(true)
+          return true
+        }
+        return run('切换模型…', api(`/api/sessions/${id}/model`, { provider, modelId }), () => (refreshDetail(), `已切换到 ${arg}`))
+      }
+      case 'thinking':
+        if (!arg) {
+          setSettings(true)
+          return true
+        }
+        return run('设置思考强度…', api(`/api/sessions/${id}/thinking`, { level: arg }), () => (refreshDetail(), `思考强度：${arg}`))
+      case 'name':
+        if (!arg) {
+          if (bot) setEditBot(true)
+          else setSettings(true)
+          return true
+        }
+        return run('重命名…', bot ? api(`/api/bots/${id}`, { name: arg }, 'PATCH') : api(`/api/sessions/${id}/name`, { name: arg }), () => {
+          if (bot) loadBot()
+          refreshDetail()
+          return `已命名为「${arg}」`
+        })
+      case 'new':
+        void newSession(detail?.cwd)
+        return true
+      case 'resume':
+        go('#/')
+        return true
+      case 'settings':
+        go('#/settings')
+        return true
+      case 'reload':
+        return run('重启 pi 进程…', api(`/api/sessions/${id}/release`, {}), () => '已重启，下一条消息会用新进程（重新加载扩展、Skills、MCP）')
+      case 'fork':
+      case 'clone':
+        toast(`/${name} 需要在终端里做`, { description: `pi --session ${id}，然后输入 /${name}` })
+        return true
+    }
+    return false
   }
   const reply = (reqId: string) => async (r: object) => {
     dispatch({ type: 'ui_done', id: reqId })
@@ -255,7 +333,7 @@ export function ChatView({ id }: { id: string }) {
           <ActivityList items={activity} onJump={jump} />
         </TabsContent>
       </Tabs>
-      <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onAbort={abort} />
+      <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onCommand={command} onAbort={abort} />
       {s.uiRequests[0] && <ExtensionDialog key={s.uiRequests[0].id} req={s.uiRequests[0]} onReply={reply(s.uiRequests[0].id)} />}
       <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot ?? undefined} adopt={bot ? undefined : { id, name: detail?.state?.sessionName || detail?.name }} onSaved={setBot} />
       <AlertDialog open={unset} onOpenChange={setUnset}>

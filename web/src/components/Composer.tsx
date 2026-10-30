@@ -4,6 +4,7 @@ import { ArrowUpIcon, CornerDownRightIcon, FileIcon, Loader2Icon, MicIcon, Paper
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
+import { BUILTINS, parseBuiltin } from '@/lib/slash'
 
 type Image = { type: 'image'; data: string; mimeType: string }
 type Att = { key: string; file: File; url?: string; path?: string; busy?: boolean }
@@ -34,7 +35,7 @@ type Recognition = {
 const SpeechRecognition = (globalThis as unknown as { SpeechRecognition?: new () => Recognition; webkitSpeechRecognition?: new () => Recognition }).SpeechRecognition ??
   (globalThis as unknown as { webkitSpeechRecognition?: new () => Recognition }).webkitSpeechRecognition
 
-type Command = { name: string; description?: string }
+type Command = { name: string; description?: string; source?: string }
 const coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
 
 type Props = {
@@ -45,10 +46,11 @@ type Props = {
   disabled: boolean
   queued: number
   onSend: (text: string, behavior?: 'steer' | 'followUp', images?: Image[]) => Promise<boolean>
+  onCommand: (name: string, arg: string) => Promise<boolean>
   onAbort: () => void
 }
 
-export function Composer({ sessionId, name, visionOk, streaming, disabled, queued, onSend, onAbort }: Props) {
+export function Composer({ sessionId, name, visionOk, streaming, disabled, queued, onSend, onCommand, onAbort }: Props) {
   const [text, setText] = useState('')
   const [atts, setAtts] = useState<Att[]>([])
   const [listening, setListening] = useState(false)
@@ -67,7 +69,8 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
       .catch(() => setCommands([]))
   }, [slash, commands, sessionId])
 
-  const matches = slash === null || !commands ? [] : commands.filter((c) => c.name.startsWith(slash)).slice(0, 8)
+  const all: Command[] = [...BUILTINS.map(([name, description]) => ({ name, description, source: 'Pimu' })), ...(commands ?? [])]
+  const matches = slash === null ? [] : all.filter((c) => c.name.startsWith(slash)).slice(0, 10)
 
   // Images go to the model natively (prompt images); other files are uploaded
   // to the bot's folder and their path is mentioned so pi reads them itself.
@@ -109,6 +112,11 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
 
   const send = async (behavior?: 'steer' | 'followUp') => {
     if (!canSend) return
+    const cmd = atts.length ? null : parseBuiltin(text)
+    if (cmd) {
+      if (await onCommand(cmd[0], cmd[1])) setText('')
+      return
+    }
     rec.current?.stop()
     const files = atts.filter((a) => a.path)
     let t = text.trim() || (atts.length ? '请看附件。' : '')
@@ -201,7 +209,8 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
                 }}
               >
                 <span className="font-mono">/{c.name}</span>
-                <span className="truncate text-xs text-muted-foreground">{c.description}</span>
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{c.description}</span>
+                {c.source && <span className="shrink-0 rounded bg-muted px-1.5 text-[10px] text-muted-foreground">{c.source === 'Pimu' ? 'Pimu' : c.source === 'extension' ? '扩展' : c.source === 'skill' ? 'Skill' : c.source === 'prompt' ? '模板' : c.source}</span>}
               </button>
             </li>
           ))}
