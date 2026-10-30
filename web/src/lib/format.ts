@@ -23,3 +23,20 @@ const dateFmt = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numer
 export const fmtTime = (t: number) => timeFmt.format(t)
 export const fmtDate = (t: string | number) => dateFmt.format(new Date(t))
 export const fmtMs = (ms?: number) => (ms === undefined ? '' : ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`)
+
+export function fmtDuration(from?: string | null, to?: string | null): string {
+  if (!from || !to) return ''
+  const s = Math.max(0, Math.round((Date.parse(to) - Date.parse(from)) / 1000))
+  return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m${s % 60 ? `${s % 60}s` : ''}`
+}
+
+const CRON_LABELS: Record<string, string> = {
+  '* * * * *': '每分钟',
+  '*/5 * * * *': '每 5 分钟',
+  '0 * * * *': '每小时',
+  '0 9 * * *': '每天 09:00',
+  '0 9 * * 1-5': '工作日 09:00',
+  '0 9 * * 1': '每周一 09:00',
+}
+export const cronLabel = (spec: string | null) => (spec ? CRON_LABELS[spec] ?? spec : '仅手动')
+export const CRON_PRESETS = Object.entries(CRON_LABELS)

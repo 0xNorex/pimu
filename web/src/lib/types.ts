@@ -84,3 +84,38 @@ export type SessionState = {
 }
 
 export type SessionDetail = { id: string; cwd?: string; name?: string; status: SessionSummary['status']; state?: SessionState }
+
+export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'aborted'
+export type TaskRun = {
+  id: number
+  taskId: number
+  taskName: string
+  trigger: 'cron' | 'manual' | 'retry'
+  attempt: number
+  status: RunStatus
+  sessionId: string | null
+  summary: string | null
+  error: string | null
+  startedAt: string | null
+  finishedAt: string | null
+  createdAt: string
+}
+export type Task = {
+  id: number
+  name: string
+  prompt: string
+  cwd: string
+  schedule: string | null
+  model: string | null
+  sessionMode: 'new' | 'reuse'
+  sessionId: string | null
+  notify: 'always' | 'failure' | 'never'
+  maxRetries: number
+  timeoutSec: number
+  enabled: boolean
+  createdAt: string
+  updatedAt: string
+  nextRun: string | null
+  lastRun: TaskRun | null
+}
+export type GlobalEvent = { type: 'run_update'; run: TaskRun } | { type: 'proc_state'; id: string; state: string } | { type: 'resync' }
