@@ -61,6 +61,16 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
 | SSE publish with a full replay ring | 61 µs, 240 KB alloc | 0.12 µs |
 | Binary (`-s -w`) / idle RSS | 13.6 MB / 16 MB | 13.7 MB / 16 MB |
 
+## V11 chat polish
+
+- Thinking and tool rows: 36 px rows, 4 px apart when consecutive (was 44 px, 12 px).
+- pi's built-in `codemode` tool (enable with `"defaultTools": ["+codemode"]`, see
+  pi `docs/codemode.md`): the script shows as highlighted JavaScript instead of escaped
+  JSON, the nested calls from `details.calls` show with status, args, time and error,
+  and the `Script completed` header is dropped from the output. Nested calls stay out
+  of the timeline and the Activity tab, as in pi's TUI. The gate already treated
+  `codemode` as `reachesTools`, so each nested call is gated on its own.
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's

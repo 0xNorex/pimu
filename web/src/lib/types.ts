@@ -19,12 +19,13 @@ export type ToolResultMessage = {
   toolCallId: string
   toolName: string
   content: (TextBlock | ImageBlock)[]
+  details?: unknown
   isError: boolean
   timestamp: number
 }
 export type Message = UserMessage | AssistantMessage | ToolResultMessage
 
-export type ToolResult = { content?: (TextBlock | ImageBlock)[] }
+export type ToolResult = { content?: (TextBlock | ImageBlock)[]; details?: unknown }
 
 type AssistantEvent =
   | { type: 'text_start' | 'thinking_start'; contentIndex: number }

@@ -44,7 +44,7 @@ function flatten(messages: Message[], draft: AssistantMessage | null, tools: Rec
           kind: 'tool',
           key,
           ts: m.timestamp,
-          tool: { call: b, status, content: r?.content ?? t?.result?.content, durationMs: t?.durationMs },
+          tool: { call: b, status, content: r?.content ?? t?.result?.content, details: r?.details ?? t?.result?.details, durationMs: t?.durationMs },
         })
       }
     })

@@ -13,6 +13,10 @@ function truncate(s: string, n: number): string {
 // One-line summary of a tool call: bash → command, file tools → path, else first string arg.
 export function toolSummary(call: Pick<ToolCallBlock, 'name' | 'arguments'>): string {
   const a = call.arguments ?? {}
+  if (call.name === 'codemode' && typeof a.code === 'string') {
+    // First real line of the script; skip the `// @options:` line.
+    return truncate(a.code.split('\n').find((l) => l.trim() && !l.startsWith('// @options:')) ?? '', 60)
+  }
   const pick = call.name === 'bash' ? a.command : a.path ?? a.file_path
   const first = typeof pick === 'string' ? pick : Object.values(a).find((v) => typeof v === 'string')
   return truncate(typeof first === 'string' ? first : '', 60)
