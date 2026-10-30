@@ -17,17 +17,8 @@ import { every } from '@/lib/format'
 import { MemoryEditor } from './MemoryEditor'
 import { THINKING, useModels } from './ModelPicker'
 import { PageHeader } from './PageHeader'
+import { SECTIONS, type Section } from '@/lib/sections'
 
-export const SECTIONS = [
-  ['models', '模型'],
-  ['extensions', '扩展'],
-  ['skills', 'Skills'],
-  ['mcp', 'MCP'],
-  ['memory', '记忆'],
-  ['goals', '主动'],
-  ['pimu', 'Pimu'],
-] as const
-export type Section = (typeof SECTIONS)[number][0]
 
 type Ext = { name: string; path?: string; builtin: boolean; enabled: boolean }
 type MCPServer = { command?: string; args?: string[]; url?: string; description?: string; enabled?: boolean; exposure?: string }

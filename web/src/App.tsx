@@ -1,12 +1,16 @@
 import { Toaster } from '@/components/ui/sonner'
-import { ChatView } from '@/components/ChatView'
+import { lazy, Suspense } from 'react'
 import { LoginPage } from '@/components/LoginPage'
-import { SECTIONS, SettingsPage, type Section } from '@/components/SettingsPage'
 import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
-import { TaskDetail } from '@/components/TaskDetail'
-import { TasksPage } from '@/components/TasksPage'
-import { InboxPage } from '@/components/InboxPage'
+import { SECTIONS, type Section } from '@/lib/sections'
+
+// Pages load on demand so the home list (the phone's first screen) stays small.
+const ChatView = lazy(() => import('@/components/ChatView').then((m) => ({ default: m.ChatView })))
+const SettingsPage = lazy(() => import('@/components/SettingsPage').then((m) => ({ default: m.SettingsPage })))
+const TaskDetail = lazy(() => import('@/components/TaskDetail').then((m) => ({ default: m.TaskDetail })))
+const TasksPage = lazy(() => import('@/components/TasksPage').then((m) => ({ default: m.TasksPage })))
+const InboxPage = lazy(() => import('@/components/InboxPage').then((m) => ({ default: m.InboxPage })))
 import { useHashRoute } from '@/lib/route'
 
 export default function App() {
@@ -33,7 +37,7 @@ export default function App() {
           <aside className={`${page ? 'hidden' : 'flex'} w-full flex-col lg:flex lg:w-[340px] lg:shrink-0 lg:border-r lg:bg-sidebar`}>
             <BotList activeId={activeId} route={route.name} />
           </aside>
-          {page ?? (
+          {page ? <Suspense fallback={<main className="flex-1" />}>{page}</Suspense> : (
             <main className="hidden flex-1 items-center justify-center text-sm text-muted-foreground lg:flex">选一个会话，或点 + 开个新的</main>
           )}
         </>

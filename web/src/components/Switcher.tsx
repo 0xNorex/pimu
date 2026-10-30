@@ -5,7 +5,7 @@ import { api } from '@/lib/api'
 import { go } from '@/lib/route'
 import type { Bot } from '@/lib/types'
 import { BotAvatar } from './BotAvatar'
-import { SECTIONS } from './SettingsPage'
+import { SECTIONS } from '@/lib/sections'
 
 type Hit = { key: string; label: string; sub?: string; href: string; bot?: string }
 
