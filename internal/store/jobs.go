@@ -124,6 +124,25 @@ func (s *Store) Jobs(botID string, limit int) ([]Job, error) {
 	return s.queryJobs(`WHERE (? = '' OR bot_id = ?) ORDER BY id DESC LIMIT ?`, botID, botID, limit)
 }
 
+// RunningJobs counts running jobs per bot (for the sidebar's working ring).
+func (s *Store) RunningJobs() (map[string]int, error) {
+	rows, err := s.db.Query(`SELECT bot_id, count(*) FROM jobs WHERE status = 'running' GROUP BY bot_id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := map[string]int{}
+	for rows.Next() {
+		var id string
+		var n int
+		if err := rows.Scan(&id, &n); err != nil {
+			return nil, err
+		}
+		m[id] = n
+	}
+	return m, rows.Err()
+}
+
 // QueuedJobs is the FIFO queue; UndeliveredJobs are finished jobs whose result
 // has not reached the bot's main session yet.
 func (s *Store) QueuedJobs() ([]Job, error) {

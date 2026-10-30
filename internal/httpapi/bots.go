@@ -23,6 +23,8 @@ type botOut struct {
 	UpdatedAt time.Time `json:"updatedAt"`
 	Last      string    `json:"last,omitempty"`
 	LastRole  string    `json:"lastRole,omitempty"`
+	// JobsRunning is how many of the bot's background jobs are running now.
+	JobsRunning int `json:"jobsRunning,omitempty"`
 }
 
 func (s *Server) botOut(b store.Bot, infos map[string]sessions.Info) botOut {
@@ -49,9 +51,12 @@ func (s *Server) handleBotList(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	infos := s.infos()
+	running, _ := s.st.RunningJobs() // best effort: the ring is cosmetic
 	out := make([]botOut, 0, len(bots))
 	for _, b := range bots {
-		out = append(out, s.botOut(b, infos))
+		o := s.botOut(b, infos)
+		o.JobsRunning = running[b.SessionID]
+		out = append(out, o)
 	}
 	writeJSON(w, 200, map[string]any{"bots": out})
 }
