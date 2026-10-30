@@ -74,6 +74,14 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 // guard enforces auth and CSRF rules for /api routes.
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Webhooks (secret in ?k=) and pimu-agent.ts (internal token) authenticate
+		// in their handlers; webhooks may post any content type.
+		hook := strings.HasPrefix(r.URL.Path, "/api/goals/") && strings.HasSuffix(r.URL.Path, "/hook")
+		internal := strings.HasPrefix(r.URL.Path, "/api/internal/")
+		if hook || internal {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			// JSON (or, for uploads, a custom header) forces a CORS preflight,
 			// so a cross-site form cannot post with the session cookie.

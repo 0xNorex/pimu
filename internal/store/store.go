@@ -1,5 +1,6 @@
-// Package store is Pimu's SQLite database: tasks, runs, and bots (the
-// display metadata pi cannot hold for a session).
+// Package store is Pimu's SQLite database: tasks, runs, bots (the display
+// metadata pi cannot hold for a session) and the autonomy tables (goals,
+// events, inbox, beats; see docs/AUTONOMY.md).
 // Sessions, messages, activity and memory stay in pi's own files.
 package store
 
@@ -60,7 +61,7 @@ CREATE TABLE bots (
   archived     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-`}
+`, goalsSchema}
 
 type Store struct{ db *sql.DB }
 

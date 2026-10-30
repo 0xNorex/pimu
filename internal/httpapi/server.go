@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/0xNorex/pimu/internal/config"
+	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/hub"
 	"github.com/0xNorex/pimu/internal/pirpc"
 	"github.com/0xNorex/pimu/internal/sessions"
@@ -27,13 +28,14 @@ type Server struct {
 	hub       *hub.Hub
 	st        *store.Store
 	tasks     *tasks.Service
+	goals     *goals.Service
 	version   string
 	piVersion string
 	limiter   *limiter
 }
 
-func New(cfg *config.Config, h *hub.Hub, st *store.Store, tk *tasks.Service, version, piVersion string) *Server {
-	return &Server{cfg: cfg, hub: h, st: st, tasks: tk, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
+func New(cfg *config.Config, h *hub.Hub, st *store.Store, tk *tasks.Service, gs *goals.Service, version, piVersion string) *Server {
+	return &Server{cfg: cfg, hub: h, st: st, tasks: tk, goals: gs, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
 }
 
 func (s *Server) Handler(static fs.FS) http.Handler {
@@ -82,6 +84,24 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/settings/mcp/status", s.handleMCPStatus)
 	api.HandleFunc("GET /api/settings/commands", s.handleSettingsCommands)
 	api.HandleFunc("GET /api/settings/skill", s.handleSettingsSkill)
+	api.HandleFunc("GET /api/bots/{id}/goals", s.handleGoalList)
+	api.HandleFunc("POST /api/bots/{id}/goals", s.handleGoalCreate)
+	api.HandleFunc("GET /api/goals", s.handleGoalAll)
+	api.HandleFunc("GET /api/goals/{id}", s.handleGoalGet)
+	api.HandleFunc("PATCH /api/goals/{id}", s.handleGoalPatch)
+	api.HandleFunc("DELETE /api/goals/{id}", s.handleGoalDelete)
+	api.HandleFunc("POST /api/goals/{id}/beat", s.handleGoalBeat)
+	api.HandleFunc("POST /api/goals/{id}/hook", s.handleGoalHook) // no login: ?k=<hook secret>
+	api.HandleFunc("GET /api/inbox", s.handleInbox)
+	api.HandleFunc("GET /api/inbox/count", s.handleInboxCount)
+	api.HandleFunc("POST /api/inbox/read-all", s.handleInboxReadAll)
+	api.HandleFunc("POST /api/inbox/{id}", s.handleInboxDecide)
+	api.HandleFunc("POST /api/internal/approvals", s.handleApprovalRequest) // pimu-agent.ts, internal token
+	api.HandleFunc("POST /api/internal/approvals/{id}/used", s.handleApprovalUsed)
+	api.HandleFunc("POST /api/sessions/{id}/compact", s.passthroughT("compact", 10*time.Minute, "customInstructions"))
+	api.HandleFunc("GET /api/sessions/{id}/stats", s.passthrough("get_session_stats"))
+	api.HandleFunc("POST /api/sessions/{id}/export", s.passthroughT("export_html", 2*time.Minute))
+	api.HandleFunc("GET /api/sessions/{id}/last-text", s.passthrough("get_last_assistant_text"))
 	api.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, 404, "not_found", "no such endpoint") })
 
 	mux := http.NewServeMux()
@@ -257,6 +277,11 @@ func (s *Server) handleAbort(w http.ResponseWriter, r *http.Request) {
 
 // passthrough maps a request to one pi command, copying the named JSON fields.
 func (s *Server) passthrough(piType string, fields ...string) http.HandlerFunc {
+	return s.passthroughT(piType, 30*time.Second, fields...)
+}
+
+// passthroughT is passthrough with a custom timeout (compact can take minutes).
+func (s *Server) passthroughT(piType string, timeout time.Duration, fields ...string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		cmd := map[string]any{"type": piType}
 		if len(fields) > 0 {
@@ -275,7 +300,7 @@ func (s *Server) passthrough(piType string, fields ...string) http.HandlerFunc {
 			s.hubErr(w, err)
 			return
 		}
-		s.reply(w, r, run, cmd, 30*time.Second)
+		s.reply(w, r, run, cmd, timeout)
 	}
 }
 

@@ -63,8 +63,9 @@ type Hub struct {
 	known   map[string]string // id -> cwd, sessions created here that may have no file yet
 
 	// Lookup supplies per-session extras: the cwd of a session that has no file
-	// yet (a new bot) and extra pi args (a bot's persona). Optional.
-	Lookup func(id string) (cwd string, args []string, ok bool)
+	// yet (a new bot; ok reports whether cwd is known), extra pi args (a bot's
+	// persona) and extra env (PIMU_* for bots, heartbeats, goal tasks). Optional.
+	Lookup func(id string) (cwd string, args, env []string, ok bool)
 
 	// Global carries cross-session events (proc_state with id, run_update) for /api/events.
 	Global *Stream
@@ -158,7 +159,7 @@ func (h *Hub) Ensure(ctx context.Context, id string) (*Run, error) {
 	cwd, ok := h.known[id]
 	h.mu.Unlock()
 	if !ok && h.Lookup != nil {
-		cwd, _, ok = h.Lookup(id)
+		cwd, _, _, ok = h.Lookup(id)
 	}
 	if ok {
 		return h.start(ctx, id, cwd, []string{"--session-id", id})
@@ -191,12 +192,12 @@ func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Ru
 	r := &Run{ID: id, Cwd: cwd, lastActive: time.Now()}
 	args := append([]string{"--mode", "rpc"}, sessArgs...)
 	args = append(args, h.cfg.PiArgs...)
-	if h.Lookup != nil {
-		if _, extra, ok := h.Lookup(id); ok {
-			args = append(args, extra...)
-		}
-	}
 	env := append(os.Environ(), "PIMU_LOCK_OWNER="+id)
+	if h.Lookup != nil {
+		_, extra, extraEnv, _ := h.Lookup(id)
+		args = append(args, extra...)
+		env = append(env, extraEnv...)
+	}
 	proc, err := pirpc.Start(h.cfg.PiBin, args, cwd, env, func(line []byte) { h.onEvent(r, stream, line) })
 	if err != nil {
 		lock.Release(h.cfg.AgentDir, id)

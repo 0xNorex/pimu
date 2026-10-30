@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/0xNorex/pimu/internal/config"
+	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/httpapi"
 	"github.com/0xNorex/pimu/internal/hub"
 	"github.com/0xNorex/pimu/internal/notify"
@@ -89,24 +90,26 @@ func serve() error {
 	h := hub.New(cfg)
 	// A bot is a pi session; its persona rides on --append-system-prompt and
 	// its name on --name until pi has recorded it.
-	h.Lookup = func(id string) (string, []string, bool) {
+	tg := notify.Telegram{Token: cfg.TGToken, ChatID: cfg.TGChatID}
+	tk := tasks.New(st, h, tg, cfg.PublicURL)
+	gs := goals.New(st, h, tk, tg, cfg.DataDir, cfg.PublicURL, cfg.Addr)
+	h.Lookup = func(id string) (string, []string, []string, bool) {
+		args, env := gs.Extras(id) // PIMU_* for bots, heartbeats and goal subtasks
 		b, err := st.Bot(id)
 		if err != nil {
-			return "", nil, false
+			return "", args, env, false
 		}
-		var args []string
 		if b.Persona != "" {
 			args = append(args, "--append-system-prompt", b.Persona)
 		}
 		if info, ok := h.Idx.Find(id); !ok || info.Name != b.Name {
 			args = append(args, "--name", b.Name)
 		}
-		return b.Cwd, args, true
+		return b.Cwd, args, env, true
 	}
-	tk := tasks.New(st, h, notify.Telegram{Token: cfg.TGToken, ChatID: cfg.TGChatID}, cfg.PublicURL)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, h, st, tk, version, piVersion).Handler(web.FS()),
+		Handler:           httpapi.New(cfg, h, st, tk, gs, version, piVersion).Handler(web.FS()),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -115,6 +118,7 @@ func serve() error {
 	if err := tk.Start(ctx); err != nil {
 		return fmt.Errorf("tasks: %w", err)
 	}
+	gs.Start(ctx)
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()

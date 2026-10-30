@@ -37,6 +37,9 @@ type Service struct {
 	mu      sync.Mutex
 	entries map[int64]cron.EntryID
 	ctx     context.Context
+
+	// OnFinish, if set, sees every finished run (goals turn subtask results into events).
+	OnFinish func(taskID int64, run store.Run, status, summary, errText string)
 }
 
 func New(st *store.Store, h *hub.Hub, tg notify.Telegram, publicURL string) *Service {
@@ -335,6 +338,9 @@ func (s *Service) finish(run store.Run, status, summary, errText string) {
 	t, err := s.st.Task(run.TaskID)
 	if err != nil {
 		return
+	}
+	if s.OnFinish != nil {
+		go s.OnFinish(t.ID, run, status, summary, errText)
 	}
 	if t.Notify == "always" || (t.Notify == "failure" && status == "failed") {
 		go s.notify(t, run, status, summary, errText)
