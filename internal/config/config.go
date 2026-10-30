@@ -23,6 +23,9 @@ type Config struct {
 	LogLevel    string
 	AgentDir    string // $PI_CODING_AGENT_DIR or ~/.pi/agent
 	SessionDir  string // $PI_CODING_AGENT_SESSION_DIR or <AgentDir>/sessions
+	DataDir     string // pimu.db lives here
+	TGToken     string // Telegram bot token; empty disables notifications
+	TGChatID    string
 }
 
 func env(k, def string) string {
@@ -48,6 +51,8 @@ func Load(requireToken bool) (*Config, error) {
 		LogLevel:  env("PIMU_LOG_LEVEL", "info"),
 		AgentDir:  expand(env("PI_CODING_AGENT_DIR", filepath.Join(home, ".pi", "agent")), home),
 	}
+	c.DataDir = expand(env("PIMU_DATA_DIR", filepath.Join(home, ".local", "share", "pimu")), home)
+	c.TGToken, c.TGChatID = os.Getenv("PIMU_TELEGRAM_TOKEN"), env("PIMU_TELEGRAM_CHAT_ID", "")
 	c.SessionDir = expand(env("PI_CODING_AGENT_SESSION_DIR", filepath.Join(c.AgentDir, "sessions")), home)
 	if requireToken && len(c.Token) < 32 {
 		return nil, fmt.Errorf("PIMU_TOKEN must be at least 32 characters (try: openssl rand -hex 32)")

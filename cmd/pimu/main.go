@@ -17,6 +17,9 @@ import (
 	"github.com/0xNorex/pimu/internal/config"
 	"github.com/0xNorex/pimu/internal/httpapi"
 	"github.com/0xNorex/pimu/internal/hub"
+	"github.com/0xNorex/pimu/internal/notify"
+	"github.com/0xNorex/pimu/internal/store"
+	"github.com/0xNorex/pimu/internal/tasks"
 	"github.com/0xNorex/pimu/web"
 )
 
@@ -78,15 +81,24 @@ func serve() error {
 	}
 	cancel()
 
+	st, err := store.Open(cfg.DataDir)
+	if err != nil {
+		return fmt.Errorf("open db: %w", err)
+	}
+	defer st.Close()
 	h := hub.New(cfg)
+	tk := tasks.New(st, h, notify.Telegram{Token: cfg.TGToken, ChatID: cfg.TGChatID}, cfg.PublicURL)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, h, version, piVersion).Handler(web.FS()),
+		Handler:           httpapi.New(cfg, h, st, tk, version, piVersion).Handler(web.FS()),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go h.Reap(ctx)
+	if err := tk.Start(ctx); err != nil {
+		return fmt.Errorf("tasks: %w", err)
+	}
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
@@ -100,6 +112,7 @@ func serve() error {
 	sctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(sctx) // SSE streams never finish on their own; the timeout cuts them
+	tk.Stop()
 	h.Shutdown()
 	return nil
 }

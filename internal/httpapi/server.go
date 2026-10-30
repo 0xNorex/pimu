@@ -17,18 +17,22 @@ import (
 	"github.com/0xNorex/pimu/internal/hub"
 	"github.com/0xNorex/pimu/internal/pirpc"
 	"github.com/0xNorex/pimu/internal/sessions"
+	"github.com/0xNorex/pimu/internal/store"
+	"github.com/0xNorex/pimu/internal/tasks"
 )
 
 type Server struct {
 	cfg       *config.Config
 	hub       *hub.Hub
+	st        *store.Store
+	tasks     *tasks.Service
 	version   string
 	piVersion string
 	limiter   *limiter
 }
 
-func New(cfg *config.Config, h *hub.Hub, version, piVersion string) *Server {
-	return &Server{cfg: cfg, hub: h, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
+func New(cfg *config.Config, h *hub.Hub, st *store.Store, tk *tasks.Service, version, piVersion string) *Server {
+	return &Server{cfg: cfg, hub: h, st: st, tasks: tk, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
 }
 
 func (s *Server) Handler(static fs.FS) http.Handler {
@@ -53,6 +57,16 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/sessions/{id}/commands", s.passthrough("get_commands"))
 	api.HandleFunc("POST /api/sessions/{id}/ui-response", s.handleUIResponse)
 	api.HandleFunc("POST /api/sessions/{id}/release", s.handleRelease)
+	api.HandleFunc("GET /api/events", s.handleGlobalEvents)
+	api.HandleFunc("GET /api/tasks", s.handleTaskList)
+	api.HandleFunc("POST /api/tasks", s.handleTaskCreate)
+	api.HandleFunc("GET /api/tasks/{id}", s.handleTaskGet)
+	api.HandleFunc("PATCH /api/tasks/{id}", s.handleTaskPatch)
+	api.HandleFunc("DELETE /api/tasks/{id}", s.handleTaskDelete)
+	api.HandleFunc("POST /api/tasks/{id}/run", s.handleTaskRun)
+	api.HandleFunc("GET /api/runs", s.handleRuns)
+	api.HandleFunc("GET /api/memory", s.handleMemoryGet)
+	api.HandleFunc("PUT /api/memory", s.handleMemoryPut)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, 404, "not_found", "no such endpoint") })
 
 	mux := http.NewServeMux()

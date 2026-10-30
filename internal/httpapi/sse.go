@@ -15,6 +15,24 @@ import (
 // Without either, only new events are sent.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	// Snapshot (no id, so it does not move the client's resume point).
+	state := "exited"
+	holder := "none"
+	if s.hub.Running(id) != nil {
+		state, holder = "ready", "pimu"
+	} else if s.hub.Status(id) == "external" {
+		holder = "external"
+	}
+	pump(w, r, s.hub.Stream(id), map[string]any{"type": "proc_state", "state": state}, map[string]any{"type": "lock", "holder": holder})
+}
+
+// handleGlobalEvents streams cross-session events: proc_state (with id) and
+// run_update. Clients refetch lists on resync.
+func (s *Server) handleGlobalEvents(w http.ResponseWriter, r *http.Request) {
+	pump(w, r, s.hub.Global)
+}
+
+func pump(w http.ResponseWriter, r *http.Request, stream *hub.Stream, snaps ...any) {
 	rc := http.NewResponseController(w)
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream")
@@ -22,7 +40,6 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	h.Set("X-Accel-Buffering", "no")
 	w.WriteHeader(200)
 
-	stream := s.hub.Stream(id)
 	last := r.Header.Get("Last-Event-ID")
 	if last == "" {
 		last = r.URL.Query().Get("since")
@@ -37,16 +54,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	}
 	defer stream.Unsubscribe(ch)
 
-	// Snapshot (no id, so it does not move the client's resume point).
-	state := "exited"
-	holder := "none"
-	if s.hub.Running(id) != nil {
-		state, holder = "ready", "pimu"
-	} else if s.hub.Status(id) == "external" {
-		holder = "external"
+	for _, v := range snaps {
+		writeSnap(w, v)
 	}
-	writeSnap(w, map[string]any{"type": "proc_state", "state": state})
-	writeSnap(w, map[string]any{"type": "lock", "holder": holder})
 	if resync {
 		writeSnap(w, map[string]any{"type": "resync"})
 	}
