@@ -140,6 +140,7 @@ export type GlobalEvent =
   | { type: 'proc_state'; id: string; state: string }
   | { type: 'inbox' }
   | { type: 'goal_update'; goalId: number }
+  | { type: 'job_update'; job: Job }
   | { type: 'resync' }
 
 export type Beat = { id: number; goalId: number; sessionId: string; status: 'running' | 'ok' | 'budget' | 'error'; tokens: number; outcome: string; summary: string; startedAt: string; finishedAt: string | null }
@@ -169,6 +170,7 @@ export type GoalDetail = { goal: Goal; goalMd: string; stateMd: string; findings
 export type InboxItem = {
   id: number
   goalId: number
+  jobId: number
   kind: 'notify' | 'ask' | 'approval'
   title: string
   body: string
@@ -179,4 +181,20 @@ export type InboxItem = {
   goalTitle: string
   botId: string
   botName: string
+}
+
+export type Job = {
+  id: number
+  botId: string
+  title: string
+  prompt: string
+  status: 'queued' | 'running' | 'waiting_approval' | 'completed' | 'failed' | 'interrupted' | 'cancelled'
+  sessionId: string
+  result: string
+  error: string
+  tokens: number
+  delivered: boolean
+  createdAt: string
+  startedAt: string | null
+  finishedAt: string | null
 }

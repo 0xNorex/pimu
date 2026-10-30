@@ -21,6 +21,7 @@ import { BotAvatar } from './BotAvatar'
 import { BotDialog } from './BotDialog'
 import { BotTasks } from './BotTasks'
 import { BotGoals } from './BotGoals'
+import { BotJobs } from './BotJobs'
 import { Composer } from './Composer'
 import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
@@ -246,6 +247,7 @@ export function ChatView({ id }: { id: string }) {
         )}
         {bot && (
           <TabsContent value="tasks" className="min-h-0 flex-1 overflow-y-auto">
+            <BotJobs botId={id} />
             <BotTasks botId={id} />
           </TabsContent>
         )}
