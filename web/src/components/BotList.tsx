@@ -20,8 +20,8 @@ function greeting() {
   return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好'
 }
 
-// Task runs (pimu-t…) and heartbeats (pimu-g…) live under their task/goal, not here.
-const isBackground = (id: string) => /^pimu-[tg]\d/.test(id)
+// Task runs (pimu-t…), heartbeats (pimu-g…) and background jobs (pimu-j…) live under their task/goal/bot, not here.
+const isBackground = (id: string) => /^pimu-[tgj]\d/.test(id)
 // "/home/me/proj/x" -> "~/proj/x"
 export const shortPath = (p: string, home: string) => (home && (p === home || p.startsWith(home + '/')) ? '~' + p.slice(home.length) : p)
 

@@ -90,6 +90,11 @@ function Row({ j, reload }: { j: Job; reload: () => void }) {
           {j.status === 'interrupted' && <p className="text-xs text-muted-foreground">Pimu 重启时它还在运行。不会自动重跑，由你决定：</p>}
           <pre className="max-h-32 overflow-auto rounded-md bg-muted p-2 text-xs whitespace-pre-wrap">{j.prompt}</pre>
           {(j.result || j.error) && <pre className="max-h-60 overflow-auto rounded-md border p-2 text-xs whitespace-pre-wrap">{j.error ? `${j.error}\n\n` : ''}{j.result}</pre>}
+          {j.sessionId && j.status !== 'queued' && (
+            <a href={`#/s/${j.sessionId}`} className="block text-xs text-muted-foreground underline">
+              打开它的会话
+            </a>
+          )}
           {(j.status === 'running' || j.status === 'waiting_approval') && (
             <form
               className="flex gap-2"
