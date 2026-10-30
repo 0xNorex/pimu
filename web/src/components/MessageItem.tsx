@@ -55,7 +55,16 @@ export function MessageItem({ item }: { item: Item }) {
     case 'user':
       return (
         <div className="flex justify-end">
-          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl bg-muted px-3.5 py-2">{item.text}</div>
+          <div className="flex max-w-[85%] flex-col items-end gap-1.5">
+            {item.images.length > 0 && (
+              <div className="flex flex-wrap justify-end gap-1.5">
+                {item.images.map((im, i) => (
+                  <img key={i} src={`data:${im.mimeType};base64,${im.data}`} alt="图片" className="max-h-48 max-w-full rounded-xl border object-cover" />
+                ))}
+              </div>
+            )}
+            {item.text && <div className="whitespace-pre-wrap break-words rounded-2xl bg-muted px-3.5 py-2">{item.text}</div>}
+          </div>
         </div>
       )
     case 'text':

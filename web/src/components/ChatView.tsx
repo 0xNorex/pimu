@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowDownIcon, ChevronLeftIcon, EllipsisVerticalIcon, RotateCcwIcon } from 'lucide-react'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -10,9 +11,13 @@ import { textOf } from '@/lib/format'
 import { go } from '@/lib/route'
 import { initialStore, reducer } from '@/lib/store'
 import { buildItems, toolActivity } from '@/lib/timeline'
-import type { Model, SessionDetail } from '@/lib/types'
+import { markSeen } from '@/lib/seen'
+import type { Bot, Model, SessionDetail } from '@/lib/types'
 import { useSessionEvents } from '@/lib/useSessionEvents'
 import { ActivityList } from './ActivityList'
+import { BotAvatar } from './BotAvatar'
+import { BotDialog } from './BotDialog'
+import { BotTasks } from './BotTasks'
 import { Composer } from './Composer'
 import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
@@ -34,6 +39,10 @@ export function ChatView({ id }: { id: string }) {
   const [detail, setDetail] = useState<SessionDetail | null>(null)
   const [tab, setTab] = useState('chat')
   const [settings, setSettings] = useState(false)
+  const [info, setInfo] = useState(false)
+  const [editBot, setEditBot] = useState(false)
+  const [bot, setBot] = useState<Bot | null>(null)
+  const [visionOk, setVisionOk] = useState(true)
   const [atBottom, setAtBottom] = useState(true)
   const scroller = useRef<HTMLDivElement>(null)
   const connected = useSessionEvents(id, dispatch, setDetail)
@@ -48,6 +57,26 @@ export function ChatView({ id }: { id: string }) {
       .then((r) => setModelName(r.models.find((m) => `${m.provider}/${m.id}` === idleModel)?.name))
       .catch(() => {})
   }, [idleModel])
+
+  const loadBot = useCallback(() => {
+    api<{ bot: Bot }>(`/api/bots/${id}`).then((r) => setBot(r.bot)).catch(() => setBot(null))
+  }, [id])
+  useEffect(loadBot, [loadBot])
+  useEffect(() => {
+    markSeen(id)
+  }, [id, s.messages.length, s.streaming])
+
+  // Warn before sending images to a text-only model (pi drops them silently).
+  const modelKey = detail?.state?.model ? `${detail.state.model.provider}/${detail.state.model.id}` : ''
+  useEffect(() => {
+    if (!modelKey) return
+    api<{ models: Model[] }>('/api/models')
+      .then((r) => {
+        const m = r.models.find((x) => `${x.provider}/${x.id}` === modelKey) as (Model & { input?: string[] }) | undefined
+        setVisionOk(!m?.input || m.input.includes('image'))
+      })
+      .catch(() => {})
+  }, [modelKey])
 
   const refreshDetail = useCallback(() => {
     api<SessionDetail>(`/api/sessions/${id}`).then(setDetail).catch(() => {})
@@ -69,9 +98,9 @@ export function ChatView({ id }: { id: string }) {
   }, [items, atBottom])
 
   const readOnly = s.lock === 'external'
-  const send = async (message: string, behavior?: 'steer' | 'followUp') => {
+  const send = async (message: string, behavior?: 'steer' | 'followUp', images?: { type: 'image'; data: string; mimeType: string }[]) => {
     try {
-      await api(`/api/sessions/${id}/prompt`, { message, behavior })
+      await api(`/api/sessions/${id}/prompt`, { message, behavior, images })
       dispatch({ type: 'clear_exit' })
       setAtBottom(true)
       return true
@@ -108,7 +137,7 @@ export function ChatView({ id }: { id: string }) {
   }
   const lastUser = [...s.messages].reverse().find((m) => m.role === 'user')
 
-  const title = detail?.state?.sessionName || detail?.name || id
+  const title = bot?.name || detail?.state?.sessionName || detail?.name || '对话'
   const model = detail?.state?.model?.provider !== 'unknown' ? detail?.state?.model?.name || modelName || detail?.state?.model?.id : undefined
 
   return (
@@ -117,12 +146,15 @@ export function ChatView({ id }: { id: string }) {
         <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
           <ChevronLeftIcon />
         </Button>
-        <div className="min-w-0 flex-1 py-2 pl-1">
-          <h1 className="truncate text-[15px] font-medium">{title}</h1>
-          <p className="truncate text-xs text-muted-foreground" aria-live="polite">
-            {s.streaming ? `运行中 · ${model ?? 'pi'} · 已用 ${elapsed}s` : [model, detail?.state?.thinkingLevel, detail?.cwd].filter(Boolean).join(' · ')}
-          </p>
-        </div>
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-1 text-left" onClick={() => (bot ? setEditBot(true) : setInfo(true))} aria-label={bot ? '编辑 Bot' : '详情'}>
+          {bot && <BotAvatar emoji={bot.emoji} className="size-9 text-xl" />}
+          <span className="min-w-0">
+            <span className="block truncate text-[15px] font-medium">{title}</span>
+            <span className="block truncate text-xs text-muted-foreground" aria-live="polite">
+              {s.streaming ? `正在回复… ${elapsed}s` : bot?.description || model || ''}
+            </span>
+          </span>
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="size-11" aria-label="会话菜单">
@@ -130,12 +162,11 @@ export function ChatView({ id }: { id: string }) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onSelect={() => setEditBot(true)}>{bot ? '编辑 Bot（名字、人设）' : '设为 Bot'}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setSettings(true)} disabled={readOnly}>
-              模型 / thinking / 名称
+              模型与思考强度
             </DropdownMenuItem>
-            <DropdownMenuItem onSelect={release} disabled={readOnly}>
-              交给终端（释放进程和锁）
-            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setInfo(true)}>详情</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
@@ -143,13 +174,20 @@ export function ChatView({ id }: { id: string }) {
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
         <TabsList className="mx-3 mt-2 self-start">
           <TabsTrigger value="chat">对话</TabsTrigger>
+          {bot && <TabsTrigger value="tasks">任务</TabsTrigger>}
           <TabsTrigger value="activity">活动</TabsTrigger>
         </TabsList>
         <TabsContent value="chat" className="relative min-h-0 flex-1">
           <div ref={scroller} onScroll={onScroll} className="absolute inset-0 overflow-y-auto overscroll-contain">
             <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4 text-[15px] leading-relaxed">
               {!s.loaded && [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-              {s.loaded && items.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">新会话，发条消息开始。</p>}
+              {s.loaded && items.length === 0 && (
+                <div className="py-12 text-center text-sm text-muted-foreground">
+                  {bot && <BotAvatar emoji={bot.emoji} className="mx-auto mb-3 size-16 text-4xl" />}
+                  <p className="font-medium text-foreground">{bot?.name ?? '新对话'}</p>
+                  <p className="mt-1">{bot?.description || '发条消息开始。'}</p>
+                </div>
+              )}
               {items.map((it) => (
                 <MessageItem key={it.key} item={it} />
               ))}
@@ -172,12 +210,44 @@ export function ChatView({ id }: { id: string }) {
             </Button>
           )}
         </TabsContent>
+        {bot && (
+          <TabsContent value="tasks" className="min-h-0 flex-1 overflow-y-auto">
+            <BotTasks botId={id} />
+          </TabsContent>
+        )}
         <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto">
           <ActivityList items={activity} onJump={jump} />
         </TabsContent>
       </Tabs>
-      <Composer sessionId={id} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onAbort={abort} />
+      <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onAbort={abort} />
       {s.uiRequests[0] && <ExtensionDialog key={s.uiRequests[0].id} req={s.uiRequests[0]} onReply={reply(s.uiRequests[0].id)} />}
+      <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot ?? undefined} adopt={bot ? undefined : { id, name: detail?.state?.sessionName || detail?.name }} onSaved={setBot} />
+      <Sheet open={info} onOpenChange={setInfo}>
+        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto pb-[max(env(safe-area-inset-bottom),16px)]">
+          <SheetHeader>
+            <SheetTitle>详情</SheetTitle>
+            <SheetDescription>底层是一个 pi 会话；对话过长时 pi 会自动压缩上下文。</SheetDescription>
+          </SheetHeader>
+          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 px-4 text-sm">
+            {[
+              ['模型', [model, detail?.state?.thinkingLevel].filter(Boolean).join(' · ')],
+              ['工作目录', detail?.cwd],
+              ['会话 ID', id],
+              ['终端打开', `pi --session ${id}`],
+            ].map(([k, v]) => (
+              <div key={k} className="contents">
+                <dt className="text-muted-foreground">{k}</dt>
+                <dd className="min-w-0 break-all font-mono text-xs leading-5">{v || '—'}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="px-4">
+            <Button variant="outline" className="min-h-11 w-full" disabled={readOnly} onClick={() => void release()}>
+              交给终端（释放进程和锁）
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
       <ModelPicker open={settings} onOpenChange={setSettings} detail={detail} onSaved={refreshDetail} />
     </div>
   )
