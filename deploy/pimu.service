@@ -1,0 +1,17 @@
+[Unit]
+Description=Pimu - Just Pi, everywhere
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/pimu serve
+EnvironmentFile=%h/.config/pimu/env
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Restart=on-failure
+RestartSec=3
+KillMode=mixed
+TimeoutStopSec=20
+MemoryMax=2500M
+
+[Install]
+WantedBy=default.target
