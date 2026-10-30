@@ -287,7 +287,7 @@ export function ChatView({ id }: { id: string }) {
                 </div>
               )}
               {items.map((it, i) => (
-                <div key={it.key} className={STEP.has(it.kind) && STEP.has(items[i - 1]?.kind) ? 'msg-in -mt-2' : 'msg-in'}>
+                <div key={it.key} className={STEP.has(it.kind) && STEP.has(items[i - 1]?.kind) ? 'msg-in -mt-2.5' : 'msg-in'}>
                   <MessageItem item={it} />
                 </div>
               ))}

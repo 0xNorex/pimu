@@ -63,7 +63,7 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
 
 ## V11 chat polish
 
-- Thinking and tool rows: 36 px rows, 4 px apart when consecutive (was 44 px, 12 px).
+- Thinking and tool rows: 28 px rows, 2 px apart when consecutive, 14 px icons (was 44 px rows, 12 px apart).
 - pi's built-in `codemode` tool (enable with `"defaultTools": ["+codemode"]`, see
   pi `docs/codemode.md`): the script shows as highlighted JavaScript instead of escaped
   JSON, the nested calls from `details.calls` show with status, args, time and error,

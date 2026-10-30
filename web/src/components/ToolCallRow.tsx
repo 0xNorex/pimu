@@ -62,7 +62,7 @@ export function Thumb({ img }: { img: ImageBlock }) {
 }
 
 function StatusIcon({ status, small }: { status: string; small?: boolean }) {
-  const z = small ? 'size-3.5 shrink-0' : 'size-4 shrink-0'
+  const z = small ? 'size-3 shrink-0' : 'size-3.5 shrink-0'
   if (status === 'ok') return <CheckIcon className={`${z} text-emerald-600 dark:text-emerald-400`} aria-label="成功" />
   if (status === 'error') return <XIcon className={`${z} text-destructive`} aria-label="失败" />
   if (status === 'cancelled') return <XIcon className={`${z} text-muted-foreground`} aria-label="已取消" />
@@ -110,9 +110,9 @@ export function ToolCallRow({ tool }: { tool: ToolView }) {
   const calls = code ? nestedCalls(tool).length : 0
   return (
     <Collapsible open={open} onOpenChange={setOpen} id={`tool-${tool.call.id}`} className="scroll-mt-16">
-      <CollapsibleTrigger className="flex min-h-9 w-full items-center gap-2 rounded-md px-1 text-left font-mono text-[13px] hover:bg-muted/60">
-        <ChevronRightIcon className={`size-4 shrink-0 transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} />
-        <Icon className="size-4 shrink-0 text-muted-foreground" />
+      <CollapsibleTrigger className="flex min-h-7 w-full items-center gap-2 rounded-md px-1 text-left font-mono text-[13px] hover:bg-muted/60">
+        <ChevronRightIcon className={`size-3.5 shrink-0 transition-transform motion-reduce:transition-none ${open ? 'rotate-90' : ''}`} />
+        <Icon className="size-3.5 shrink-0 text-muted-foreground" />
         <span className="shrink-0 font-medium">{browser ? tool.call.name.slice(17) : tool.call.name}</span>
         <span className="min-w-0 flex-1 truncate text-muted-foreground">{toolSummary(tool.call)}</span>
         {calls > 0 && <span className="shrink-0 text-xs text-muted-foreground">{calls} 调用</span>}
