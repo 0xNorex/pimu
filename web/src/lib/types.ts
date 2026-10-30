@@ -72,8 +72,26 @@ export type SessionSummary = {
   cwd: string
   name?: string
   preview?: string
+  last?: string
+  lastRole?: 'user' | 'assistant'
   updatedAt: string
   status: 'idle' | 'running' | 'streaming' | 'external'
+}
+
+// A bot is a pi session plus display metadata (Pimu's bots table).
+export type Bot = {
+  id: string
+  name: string
+  emoji: string
+  description: string
+  persona: string
+  cwd: string
+  archived: boolean
+  createdAt: string
+  updatedAt: string
+  status: SessionSummary['status']
+  last?: string
+  lastRole?: 'user' | 'assistant'
 }
 
 export type SessionState = {

@@ -40,3 +40,14 @@ const CRON_LABELS: Record<string, string> = {
 }
 export const cronLabel = (spec: string | null) => (spec ? CRON_LABELS[spec] ?? spec : '仅手动')
 export const CRON_PRESETS = Object.entries(CRON_LABELS)
+
+// Messaging-style time: HH:mm today, 昨天, else M/D.
+export function fmtShort(t: string): string {
+  const d = new Date(t)
+  const now = new Date()
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+  const diff = Math.round((day(now) - day(d)) / 86400000)
+  if (diff === 0) return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false })
+  if (diff === 1) return '昨天'
+  return `${d.getMonth() + 1}/${d.getDate()}`
+}

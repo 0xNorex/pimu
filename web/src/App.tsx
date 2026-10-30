@@ -2,7 +2,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { ChatView } from '@/components/ChatView'
 import { LoginPage } from '@/components/LoginPage'
 import { MemoryPage } from '@/components/MemoryPage'
-import { SessionList } from '@/components/SessionList'
+import { BotList } from '@/components/BotList'
 import { TaskDetail } from '@/components/TaskDetail'
 import { TasksPage } from '@/components/TasksPage'
 import { useHashRoute } from '@/lib/route'
@@ -16,7 +16,7 @@ export default function App() {
     ) : route.name === 'tasks' ? (
       <TasksPage />
     ) : route.name === 'task' ? (
-      <TaskDetail key={route.id} id={route.id} />
+      <TaskDetail key={route.id} id={route.id} bot={route.bot} />
     ) : route.name === 'memory' ? (
       <MemoryPage />
     ) : null
@@ -26,11 +26,11 @@ export default function App() {
         <LoginPage />
       ) : (
         <>
-          <aside className={`${page ? 'hidden' : 'flex'} w-full flex-col lg:flex lg:w-[280px] lg:shrink-0 lg:border-r`}>
-            <SessionList activeId={activeId} route={route.name} />
+          <aside className={`${page ? 'hidden' : 'flex'} w-full flex-col lg:flex lg:w-[340px] lg:shrink-0 lg:border-r`}>
+            <BotList activeId={activeId} route={route.name} />
           </aside>
           {page ?? (
-            <main className="hidden flex-1 items-center justify-center text-sm text-muted-foreground lg:flex">选择或新建一个会话</main>
+            <main className="hidden flex-1 items-center justify-center text-sm text-muted-foreground lg:flex">选一个 Bot 开始聊天</main>
           )}
         </>
       )}
