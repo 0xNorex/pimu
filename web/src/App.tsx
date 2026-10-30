@@ -6,6 +6,7 @@ import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
 import { TaskDetail } from '@/components/TaskDetail'
 import { TasksPage } from '@/components/TasksPage'
+import { InboxPage } from '@/components/InboxPage'
 import { useHashRoute } from '@/lib/route'
 
 export default function App() {
@@ -16,6 +17,8 @@ export default function App() {
       <ChatView key={route.id} id={route.id} />
     ) : route.name === 'tasks' ? (
       <TasksPage />
+    ) : route.name === 'inbox' ? (
+      <InboxPage />
     ) : route.name === 'task' ? (
       <TaskDetail key={route.id} id={route.id} bot={route.bot} />
     ) : route.name === 'settings' ? (

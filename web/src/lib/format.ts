@@ -51,3 +51,4 @@ export function fmtShort(t: string): string {
   if (diff === 1) return '昨天'
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
+export const every = (sec: number) => (sec % 3600 === 0 ? `每 ${sec / 3600} 小时` : `每 ${Math.round(sec / 60)} 分钟`)

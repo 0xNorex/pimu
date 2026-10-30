@@ -20,6 +20,7 @@ import { ActivityList } from './ActivityList'
 import { BotAvatar } from './BotAvatar'
 import { BotDialog } from './BotDialog'
 import { BotTasks } from './BotTasks'
+import { BotGoals } from './BotGoals'
 import { Composer } from './Composer'
 import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
@@ -193,6 +194,7 @@ export function ChatView({ id }: { id: string }) {
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
         <TabsList className="mx-auto mt-2 w-fit">
           <TabsTrigger value="chat">对话</TabsTrigger>
+          {bot && <TabsTrigger value="goals">目标</TabsTrigger>}
           {bot && <TabsTrigger value="tasks">任务</TabsTrigger>}
           <TabsTrigger value="activity">活动</TabsTrigger>
         </TabsList>
@@ -237,6 +239,11 @@ export function ChatView({ id }: { id: string }) {
             <ArrowDownIcon /> {s.streaming ? '回到最新' : '到底部'}
           </Button>
         </TabsContent>
+        {bot && (
+          <TabsContent value="goals" className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+            <BotGoals botId={id} />
+          </TabsContent>
+        )}
         {bot && (
           <TabsContent value="tasks" className="min-h-0 flex-1 overflow-y-auto">
             <BotTasks botId={id} />

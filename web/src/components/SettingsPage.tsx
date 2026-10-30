@@ -12,7 +12,8 @@ import { Switch } from '@/components/ui/switch'
 import { api, ApiError, errMsg } from '@/lib/api'
 import { go } from '@/lib/route'
 import { getTheme, setTheme, type Theme } from '@/lib/theme'
-import type { Model } from '@/lib/types'
+import type { Goal, Model } from '@/lib/types'
+import { every } from '@/lib/format'
 import { MemoryEditor } from './MemoryEditor'
 import { THINKING, useModels } from './ModelPicker'
 import { PageHeader } from './PageHeader'
@@ -23,6 +24,7 @@ export const SECTIONS = [
   ['skills', 'Skills'],
   ['mcp', 'MCP'],
   ['memory', '记忆'],
+  ['goals', '主动'],
   ['pimu', 'Pimu'],
 ] as const
 export type Section = (typeof SECTIONS)[number][0]
@@ -117,6 +119,8 @@ export function SettingsPage({ section }: { section: Section }) {
         <div key={section} className="msg-in mx-auto flex max-w-2xl flex-col gap-6 p-4 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
           {section === 'memory' ? (
             <MemoryEditor />
+          ) : section === 'goals' ? (
+            <GoalsSection />
           ) : !s ? (
             [0, 1].map((i) => <Skeleton key={i} className="h-32 rounded-xl" />)
           ) : section === 'models' ? (
@@ -423,5 +427,44 @@ function PimuSection({ s }: { s: Settings }) {
         </button>
       </Group>
     </>
+  )
+}
+
+// Every goal across bots, plus where their files live. Editing happens in the bot's 目标 tab.
+function GoalsSection() {
+  const [goals, setGoals] = useState<(Goal & { botName: string })[] | null>(null)
+  useEffect(() => void api<{ goals: (Goal & { botName: string })[] }>('/api/goals').then((r) => setGoals(r.goals)).catch(() => {}), [])
+  return (
+    <section className="space-y-3">
+      <div>
+        <h2 className="text-base font-semibold">主动目标</h2>
+        <p className="text-sm text-muted-foreground">目标挂在 Bot 上。每次心跳先用零 token 的预检判断要不要跑，再开一个全新的 pi 会话执行；只有重要的事才进收件箱和 Telegram。</p>
+      </div>
+      {!goals && <Skeleton className="h-24 rounded-xl" />}
+      {goals?.length === 0 && <p className="text-sm text-muted-foreground">还没有目标。打开一个 Bot → 目标 → 新目标。</p>}
+      <ul className="divide-y rounded-xl border">
+        {goals?.map((g) => (
+          <li key={g.id}>
+            <a href={`#/s/${g.botId}`} className="flex items-center gap-3 px-3 py-2.5 hover:bg-muted/50">
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">
+                  {g.botName} · {g.title}
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  L{g.level} · {every(g.everySec)} · 今日 {Math.round(g.todayTokens / 1000)}k tok{g.precheck && ` · ${g.precheck}`}
+                </div>
+              </div>
+              <Badge variant={g.enabled ? 'secondary' : 'outline'}>{g.enabled ? '启用' : '停用'}</Badge>
+            </a>
+          </li>
+        ))}
+      </ul>
+      <div className="space-y-1 rounded-xl border p-3 text-xs text-muted-foreground">
+        <p className="font-medium text-foreground">文件在哪</p>
+        <p className="font-mono">~/.local/share/pimu/bots/&lt;bot&gt;/MEMORY.md · log/YYYY-MM-DD.md</p>
+        <p className="font-mono">…/bots/&lt;bot&gt;/goals/&lt;slug&gt;/GOAL.md · STATE.md · findings.md</p>
+        <p>心跳会话 id 形如 pimu-g&lt;目标&gt;-b&lt;心跳&gt;，不出现在首页列表。</p>
+      </div>
+    </section>
   )
 }

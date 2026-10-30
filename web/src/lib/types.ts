@@ -135,4 +135,48 @@ export type Task = {
   nextRun: string | null
   lastRun: TaskRun | null
 }
-export type GlobalEvent = { type: 'run_update'; run: TaskRun } | { type: 'proc_state'; id: string; state: string } | { type: 'resync' }
+export type GlobalEvent =
+  | { type: 'run_update'; run: TaskRun }
+  | { type: 'proc_state'; id: string; state: string }
+  | { type: 'inbox' }
+  | { type: 'goal_update'; goalId: number }
+  | { type: 'resync' }
+
+export type Beat = { id: number; goalId: number; sessionId: string; status: 'running' | 'ok' | 'budget' | 'error'; tokens: number; outcome: string; summary: string; startedAt: string; finishedAt: string | null }
+
+export type Goal = {
+  id: number
+  botId: string
+  slug: string
+  title: string
+  level: 1 | 2
+  everySec: number
+  activeHours: string
+  runSec: number
+  runTokens: number
+  dayTokens: number
+  enabled: boolean
+  nextAt: string | null
+  createdAt: string
+  todayTokens: number
+  lastBeat: Beat | null
+  precheck: string
+  botName?: string
+}
+
+export type GoalDetail = { goal: Goal; goalMd: string; stateMd: string; findings: string; beats: Beat[]; hookUrl: string; dir: string }
+
+export type InboxItem = {
+  id: number
+  goalId: number
+  kind: 'notify' | 'ask' | 'approval'
+  title: string
+  body: string
+  tool: string
+  status: 'new' | 'read' | 'approved' | 'denied' | 'used' | 'expired'
+  createdAt: string
+  decidedAt: string | null
+  goalTitle: string
+  botId: string
+  botName: string
+}

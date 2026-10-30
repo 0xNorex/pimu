@@ -5,6 +5,7 @@ export type Route =
   | { name: 'list' }
   | { name: 'session'; id: string }
   | { name: 'tasks' }
+  | { name: 'inbox' }
   | { name: 'task'; id: number | 'new'; bot?: string }
   | { name: 'settings'; section: string }
 
@@ -14,6 +15,7 @@ function parse(hash: string): Route {
   const m = h.match(/^\/s\/([\w-]+)$/)
   if (m) return { name: 'session', id: m[1] }
   if (h === '/tasks') return { name: 'tasks' }
+  if (h === '/inbox') return { name: 'inbox' }
   if (h === '/memory') return { name: 'settings', section: 'memory' }
   const st = h.match(/^\/settings(?:\/(\w+))?$/)
   if (st) return { name: 'settings', section: st[1] ?? 'models' }

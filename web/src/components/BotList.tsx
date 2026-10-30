@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, SparklesIcon, TerminalIcon } from 'lucide-react'
+import { BellIcon, CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, SparklesIcon, TerminalIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
@@ -46,6 +46,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   const [q, setQ] = useState('')
   const [dirs, setDirs] = useState<{ workdirs: string[]; home: string }>({ workdirs: [], home: '' })
   const [more, setMore] = useState<Record<string, boolean>>({})
+  const [unread, setUnread] = useState(0)
 
   // Animate reorders (a bot jumping to the top) with View Transitions where supported.
   const order = useRef('')
@@ -61,6 +62,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
       .catch(() => {})
     api<{ sessions: SessionSummary[] }>('/api/sessions').then((r) => setSessions(r.sessions)).catch(() => {})
     api<{ runs: TaskRun[] }>('/api/runs?status=running&limit=20').then((r) => setRuns(r.runs)).catch(() => {})
+    api<{ unread: number }>('/api/inbox/count').then((r) => setUnread(r.unread)).catch(() => {})
   }
   useEffect(() => {
     load()
@@ -147,6 +149,12 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           <p className="text-xs text-muted-foreground">{greeting()}</p>
           <h1 className="font-heading text-[26px] leading-tight font-semibold tracking-tight">Pimu</h1>
         </div>
+        <Button asChild size="icon" variant={route === 'inbox' ? 'secondary' : 'ghost'} className="relative size-11 rounded-full">
+          <a href="#/inbox" aria-label={unread ? `收件箱（${unread} 条未读）` : '收件箱'} title="收件箱">
+            <BellIcon />
+            {unread > 0 && <span className="absolute top-1.5 right-1.5 min-w-4 rounded-full bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground">{unread > 99 ? '99+' : unread}</span>}
+          </a>
+        </Button>
         <Button asChild size="icon" variant={route === 'tasks' || route === 'task' ? 'secondary' : 'ghost'} className="size-11 rounded-full">
           <a href="#/tasks" aria-label="任务" title="任务">
             <CalendarClockIcon />
