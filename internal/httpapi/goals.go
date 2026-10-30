@@ -355,6 +355,8 @@ func (s *Server) handleInboxDecide(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case it.JobID != 0:
 			s.jobs.SetWaiting(it.JobID, false)
+		case it.Kind == "approval" && it.GoalID == 0:
+			// a guarded main session: its gate is polling and claims it itself
 		case it.Kind == "approval":
 			event = fmt.Sprintf("用户批准了审批 #%d（%s）。现在可以再调用一次完全相同的工具和参数（一字不差），只允许一次：\n%s", id, it.Tool, it.Body)
 		case it.Tool == "task":
@@ -372,7 +374,7 @@ func (s *Server) handleInboxDecide(w http.ResponseWriter, r *http.Request) {
 		}
 		if it.JobID != 0 {
 			s.jobs.SetWaiting(it.JobID, false)
-		} else {
+		} else if it.GoalID != 0 {
 			event = fmt.Sprintf("用户拒绝了 #%d（%s「%s」）。不要再为同一件事请求。", id, it.Kind, it.Title)
 		}
 	default:
@@ -422,9 +424,11 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if sc.Goal == 0 && sc.Job == 0 {
-		writeErr(w, 403, "forbidden", "only heartbeats, goal tasks and jobs ask for approval")
-		return
+	if sc.Goal == 0 && sc.Job == 0 { // a bot's main session asks only in guarded mode
+		if b, err := s.st.Bot(sc.Bot); err != nil || b.Mode != store.ModeGuarded {
+			writeErr(w, 403, "forbidden", "only guarded bots, heartbeats, goal tasks and jobs ask for approval")
+			return
+		}
 	}
 	var body struct {
 		Tool       string         `json:"tool"`
@@ -459,13 +463,14 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	if sc.Job != 0 && verdict == store.VerdictPending {
 		s.jobs.SetWaiting(sc.Job, true) // the gate now polls until the user decides
 	}
-	if verdict == store.VerdictRun {
+	if isNew || verdict == store.VerdictRun {
 		s.hub.Broadcast(map[string]any{"type": "inbox"})
 	}
 	writeJSON(w, 200, map[string]any{"id": it.ID, "verdict": verdict})
 }
 
-// handleApprovalStatus is polled by a job's gate while it waits for the user.
+// handleApprovalStatus is polled by a job's or a guarded main session's gate
+// while it waits for the user.
 func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {
 	sc, ok := s.internalScope(w, r)
 	if !ok {

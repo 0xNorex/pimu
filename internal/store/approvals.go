@@ -53,8 +53,9 @@ func (s *Store) ExpireApprovals() (int64, error) {
 // it (session/tool call id). It returns the row and a verdict; isNew reports a
 // freshly filed request (to notify the user).
 func (s *Store) Approve(it Item, ref string) (out Item, verdict string, isNew bool, err error) {
-	if it.BotID == "" || it.ArgsHash == "" || (it.GoalID == 0) == (it.JobID == 0) {
-		return Item{}, "", false, errors.New("approval needs bot, args hash and exactly one of goal/job")
+	// goal 0 and job 0 is the bot's main session (guarded mode, docs/V10.md).
+	if it.BotID == "" || it.ArgsHash == "" || (it.GoalID != 0 && it.JobID != 0) {
+		return Item{}, "", false, errors.New("approval needs bot, args hash and at most one of goal/job")
 	}
 	if _, err := s.ExpireApprovals(); err != nil {
 		return Item{}, "", false, err
@@ -119,4 +120,35 @@ func (s *Store) claim(id int64, ref string) (bool, error) {
 	}
 	n, _ := res.RowsAffected()
 	return n == 1, nil
+}
+
+// ApprovalStats counts a job's approval requests from Pimu's own records, so
+// the result reported to the bot does not depend on the worker's account.
+type ApprovalStats struct {
+	Requested int `json:"approval_count"`
+	Approved  int `json:"approved"` // approved or used
+	Denied    int `json:"denied"`
+	Expired   int `json:"expired"`
+	Pending   int `json:"pending"`
+}
+
+func (s *Store) JobApprovalStats(jobID int64) (ApprovalStats, error) {
+	var a ApprovalStats
+	err := s.db.QueryRow(`SELECT count(*),
+		COALESCE(sum(status IN ('approved','used')),0), COALESCE(sum(status = 'denied'),0),
+		COALESCE(sum(status = 'expired'),0), COALESCE(sum(status IN ('new','read')),0)
+		FROM inbox WHERE kind = 'approval' AND job_id = ?`, jobID).Scan(&a.Requested, &a.Approved, &a.Denied, &a.Expired, &a.Pending)
+	return a, err
+}
+
+// Line is the factual summary appended to a job result for the bot.
+func (a ApprovalStats) Line() string {
+	s := fmt.Sprintf("[Pimu] approvals: %d requested, %d approved, %d denied", a.Requested, a.Approved, a.Denied)
+	if a.Expired > 0 {
+		s += fmt.Sprintf(", %d expired", a.Expired)
+	}
+	if a.Pending > 0 {
+		s += fmt.Sprintf(", %d pending", a.Pending)
+	}
+	return s
 }

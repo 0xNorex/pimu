@@ -61,7 +61,7 @@ CREATE TABLE bots (
   archived     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-`, goalsSchema, jobsSchema, approvalsSchema}
+`, goalsSchema, jobsSchema, approvalsSchema, botModeSchema}
 
 type Store struct{ db *sql.DB }
 
@@ -287,14 +287,24 @@ type Bot struct {
 	Persona     string `json:"persona"`
 	Cwd         string `json:"cwd"`
 	Archived    bool   `json:"archived"`
+	Mode        string `json:"mode"` // trusted (native pi) | guarded (L2 gate on the main session)
 	CreatedAt   string `json:"createdAt"`
 }
 
-const botCols = `session_id, name, description, persona, cwd, archived, created_at`
+// Bot safety modes (docs/V10.md).
+const (
+	ModeTrusted = "trusted"
+	ModeGuarded = "guarded"
+)
+
+// botModeSchema adds the per-bot safety mode.
+const botModeSchema = `ALTER TABLE bots ADD COLUMN mode TEXT NOT NULL DEFAULT 'trusted';`
+
+const botCols = `session_id, name, description, persona, cwd, archived, mode, created_at`
 
 func scanBot(r scanner) (Bot, error) {
 	var b Bot
-	err := r.Scan(&b.SessionID, &b.Name, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.CreatedAt)
+	err := r.Scan(&b.SessionID, &b.Name, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.Mode, &b.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -323,16 +333,16 @@ func (s *Store) Bot(id string) (Bot, error) {
 }
 
 func (s *Store) CreateBot(b Bot) (Bot, error) {
-	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, description, persona, cwd, archived) VALUES (?, ?, ?, ?, ?, ?)`,
-		b.SessionID, b.Name, b.Description, b.Persona, b.Cwd, b.Archived); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, description, persona, cwd, archived, mode) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		b.SessionID, b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode)); err != nil {
 		return Bot{}, err
 	}
 	return s.Bot(b.SessionID)
 }
 
 func (s *Store) UpdateBot(b Bot) (Bot, error) {
-	res, err := s.db.Exec(`UPDATE bots SET name=?, description=?, persona=?, cwd=?, archived=? WHERE session_id=?`,
-		b.Name, b.Description, b.Persona, b.Cwd, b.Archived, b.SessionID)
+	res, err := s.db.Exec(`UPDATE bots SET name=?, description=?, persona=?, cwd=?, archived=?, mode=? WHERE session_id=?`,
+		b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode), b.SessionID)
 	if err != nil {
 		return Bot{}, err
 	}
@@ -340,6 +350,13 @@ func (s *Store) UpdateBot(b Bot) (Bot, error) {
 		return Bot{}, ErrNotFound
 	}
 	return s.Bot(b.SessionID)
+}
+
+func botMode(m string) string {
+	if m == ModeGuarded {
+		return m
+	}
+	return ModeTrusted
 }
 
 // DeleteBot drops the bot metadata only; the pi session file is untouched.

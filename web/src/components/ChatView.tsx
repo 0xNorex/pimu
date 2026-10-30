@@ -22,6 +22,7 @@ import { BotDialog } from './BotDialog'
 import { BotTasks } from './BotTasks'
 import { BotGoals } from './BotGoals'
 import { BotJobs } from './BotJobs'
+import { ChatApprovals } from './ChatApprovals'
 import { Composer } from './Composer'
 import { ConnectionBanner } from './ConnectionBanner'
 import { ExtensionDialog } from './ExtensionDialog'
@@ -333,6 +334,7 @@ export function ChatView({ id }: { id: string }) {
           <ActivityList items={activity} onJump={jump} />
         </TabsContent>
       </Tabs>
+      {bot && <ChatApprovals botId={id} />}
       <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onCommand={command} onAbort={abort} />
       {s.uiRequests[0] && <ExtensionDialog key={s.uiRequests[0].id} req={s.uiRequests[0]} onReply={reply(s.uiRequests[0].id)} />}
       <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot ?? undefined} adopt={bot ? undefined : { id, name: detail?.state?.sessionName || detail?.name }} onSaved={setBot} />

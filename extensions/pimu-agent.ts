@@ -8,8 +8,12 @@
 //   file named by PIMU_CAP_FILE; it is read and deleted here at load, so it is
 //   in no environment a tool inherits. The token is scoped by Pimu to this
 //   session's own bot / goal / job.
-// - a bot's main session (L0, no PIMU_LEVEL): the pimu_task tool, plus a
-//   best-effort block on reading credentials (the user drives this session).
+// - a bot's main session (no PIMU_LEVEL): the pimu_task tool. Trusted mode (default):
+//   native pi, plus a best-effort block on reading credentials. Guarded mode
+//   (PIMU_MODE=guarded, docs/V10.md): the L2 gate below, waiting in the chat for
+//   the user's decision; dangerous commands ask instead of being refused, and
+//   pimu_task stays allowed (the job it starts is gated on its own). This is
+//   app-level gating, not an OS sandbox.
 // - heartbeats and goal subtasks (PIMU_LEVEL=1|2) and background jobs (2):
 //   a tool_call gate; any gate error blocks the call (pi fails closed).
 //   L1 observe: read-only tools inside cwd / the bot dir; writes only in the bot dir.
@@ -32,6 +36,9 @@ const LEVEL = Number(process.env.PIMU_LEVEL || 0)
 const JOB = process.env.PIMU_JOB || ""
 const BOT_ID = process.env.PIMU_BOT_ID || ""
 const API = process.env.PIMU_API || ""
+const GUARDED = LEVEL === 0 && process.env.PIMU_MODE === "guarded"
+const GATE = GUARDED ? 2 : LEVEL // gate level
+const TAG = GUARDED ? "[pimu guarded]" : `[pimu L${LEVEL}]`
 
 let CAP = ""
 const capFile = process.env.PIMU_CAP_FILE
@@ -159,8 +166,8 @@ export default function (pi: ExtensionAPI) {
     })
   }
 
-  // L0 (a bot's main session): the user is in the loop, so only credentials are off limits.
-  if (LEVEL !== 1 && LEVEL !== 2) {
+  // Trusted main session: the user is in the loop, so only credentials are off limits.
+  if (GATE !== 1 && GATE !== 2) {
     pi.on("tool_call", async (event, ctx) => {
       const input = (event.input ?? {}) as Record<string, unknown>
       const bad =
@@ -173,7 +180,7 @@ export default function (pi: ExtensionAPI) {
   }
 
   const classify = (name: string, input: Record<string, unknown>, cwd: string): Verdict => {
-    const L1 = LEVEL === 1
+    const L1 = GATE === 1
     const roots = [real(cwd), real(BOT)]
     if (READ_ONLY.has(name)) {
       const p = where(input.path ?? ".", cwd)
@@ -192,11 +199,12 @@ export default function (pi: ExtensionAPI) {
     }
     if (name === "bash") {
       const cmd = String(input.command ?? "").trim()
-      if (DANGER.test(cmd)) return { block: "危险命令，后台任务一律禁止" }
+      if (DANGER.test(cmd)) return GUARDED ? "approve" : { block: "危险命令，后台任务一律禁止" }
       if (SECRET_PATH.test(cmd)) return { block: "不允许访问凭据类文件" }
       if (L1) return { block: "L1 不能运行命令；需要时请输出 ask 让用户决定" }
       return safeBash(cmd, cwd, roots) ? "allow" : "approve"
     }
+    if (GUARDED && name === "pimu_task") return "allow" // the job is gated by its own session
     const tool = pi.getAllTools().find((t) => t.name === name)
     if (tool?.reachesTools) return "allow" // codemode / tool_search: each nested call comes back through this gate
     if (tool?.annotations?.readOnlyHint === true) return "allow"
@@ -207,12 +215,13 @@ export default function (pi: ExtensionAPI) {
     const input = (event.input ?? {}) as Record<string, unknown>
     const v = classify(event.toolName, input, ctx.cwd)
     if (v === "allow") return
-    if (typeof v === "object") return { block: true, reason: `[pimu L${LEVEL}] ${v.block}` }
+    if (typeof v === "object") return { block: true, reason: `${TAG} ${v.block}` }
     const reason = event.toolName === "bash" ? String(input.command ?? "").slice(0, 120) : String(input.path ?? "").slice(0, 120)
     const ref = { toolCallId: event.toolCallId }
     let r = await post("/api/internal/approvals", { tool: event.toolName, args: input, reason, ...ref })
-    // A job waits (paused as waiting_approval) instead of deferring to the next heartbeat.
-    while (JOB && r.verdict === "pending") {
+    // A job (paused as waiting_approval) and a guarded main session (the
+    // approval shows in the chat) wait instead of deferring to the next heartbeat.
+    while ((JOB || GUARDED) && r.verdict === "pending") {
       if (ctx.signal?.aborted) return { block: true, reason: "[pimu] 已取消" }
       await new Promise((ok) => setTimeout(ok, 2000))
       r = await post(`/api/internal/approvals/${r.id}/status`, ref)

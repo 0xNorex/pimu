@@ -239,3 +239,20 @@ func TestPromptCarriesClockGoalAndState(t *testing.T) {
 		}
 	}
 }
+
+func TestGuardedBotGetsModeEnv(t *testing.T) {
+	f := setup(t)
+	has := func() bool {
+		_, env := f.gs.Extras("pm-b")
+		return strings.Contains(strings.Join(env, " "), "PIMU_MODE=guarded")
+	}
+	if has() {
+		t.Fatal("trusted bot must run native")
+	}
+	b, _ := f.st.Bot("pm-b")
+	b.Mode = store.ModeGuarded
+	_, _ = f.st.UpdateBot(b)
+	if !has() {
+		t.Fatal("guarded bot lacks PIMU_MODE")
+	}
+}

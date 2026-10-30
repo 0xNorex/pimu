@@ -185,9 +185,68 @@ func TestInterruptExpiresJobApprovals(t *testing.T) {
 func TestApproveValidates(t *testing.T) {
 	st := testStore(t)
 	bot, goal, job := seed(t, st)
-	for _, it := range []Item{{BotID: bot, ArgsHash: "h"}, {BotID: bot, GoalID: goal, JobID: job, ArgsHash: "h"}, {BotID: bot, GoalID: goal}} {
+	for _, it := range []Item{{GoalID: goal, ArgsHash: "h"}, {BotID: bot, GoalID: goal, JobID: job, ArgsHash: "h"}, {BotID: bot, GoalID: goal}} {
 		if _, _, _, err := st.Approve(it, "x"); err == nil {
 			t.Fatalf("accepted %+v", it)
 		}
+	}
+}
+
+// The main session (no goal, no job) has its own scope: its approvals neither
+// ride on nor feed a job's.
+func TestMainSessionApprovalScope(t *testing.T) {
+	st := testStore(t)
+	fakeClock(t)
+	bot, _, job := seed(t, st)
+	main := Item{BotID: bot, Tool: "bash", ArgsHash: "h", Title: "b"}
+	first := ask(t, st, main, "pm/1", VerdictPending)
+	_, _ = st.SetItemStatus(first.ID, "approved", "new", "read")
+	ask(t, st, Item{BotID: bot, JobID: job, Tool: "bash", ArgsHash: "h"}, "j/1", VerdictPending)
+	if v, _ := st.ApprovalStatus(first.ID, "pm/1"); v != VerdictRun {
+		t.Fatalf("main approval: %s", v)
+	}
+	ask(t, st, main, "pm/2", VerdictPending) // single use
+}
+
+func TestJobApprovalStats(t *testing.T) {
+	st := testStore(t)
+	now := fakeClock(t)
+	bot, _, job := seed(t, st)
+	mk := func(h string) Item {
+		return ask(t, st, Item{BotID: bot, JobID: job, Tool: "write", ArgsHash: h}, "j/"+h, VerdictPending)
+	}
+	a, b, c, d := mk("a"), mk("b"), mk("c"), mk("d")
+	_, _ = st.SetItemStatus(a.ID, "approved", "new")
+	ask(t, st, Item{BotID: bot, JobID: job, Tool: "write", ArgsHash: "a"}, "j/a2", VerdictRun) // -> used
+	_, _ = st.SetItemStatus(b.ID, "approved", "new")
+	_, _ = st.SetItemStatus(c.ID, "denied", "new")
+	_ = d
+	*now = now.Add(PendingTTL + time.Minute)                                                     // d expires; b (approved, unused) too
+	ask(t, st, Item{BotID: bot, GoalID: 0, Tool: "x", ArgsHash: "main"}, "pm/1", VerdictPending) // other scope, not counted
+	got, err := st.JobApprovalStats(job)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := ApprovalStats{Requested: 4, Approved: 1, Denied: 1, Expired: 2}
+	if got != want {
+		t.Fatalf("stats %+v, want %+v", got, want)
+	}
+	if l := got.Line(); l != "[Pimu] approvals: 4 requested, 1 approved, 1 denied, 2 expired" {
+		t.Fatalf("line %q", l)
+	}
+	if l := (ApprovalStats{}).Line(); l != "[Pimu] approvals: 0 requested, 0 approved, 0 denied" {
+		t.Fatalf("zero line %q", l)
+	}
+}
+
+func TestBotModeDefaultsTrusted(t *testing.T) {
+	st := testStore(t)
+	b, err := st.CreateBot(Bot{SessionID: "pm-m", Name: "m", Cwd: t.TempDir(), Mode: "weird"})
+	if err != nil || b.Mode != ModeTrusted {
+		t.Fatalf("%+v %v", b, err)
+	}
+	b.Mode = ModeGuarded
+	if b, _ = st.UpdateBot(b); b.Mode != ModeGuarded {
+		t.Fatalf("update: %+v", b)
 	}
 }

@@ -176,3 +176,60 @@ func TestArgsHash(t *testing.T) {
 	}
 
 }
+
+// Guarded mode: the main session files approvals in its own scope; the user
+// decides in the inbox; the gate claims it once. Trusted mode stays 403.
+func TestGuardedMainSessionApprovals(t *testing.T) {
+	r := newRig(t)
+	r.s.cfg.Token = "login-secret"
+	b, _ := r.st.Bot("pm-a")
+	r.s.cfg.Workdirs = []string{b.Cwd}
+	user := func(method, path, body string) int {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer login-secret")
+		w := httptest.NewRecorder()
+		r.s.Handler(os.DirFS(t.TempDir())).ServeHTTP(w, req)
+		return w.Code
+	}
+	call := `{"tool":"bash","args":{"command":"touch /tmp/x"},"reason":"touch /tmp/x","toolCallId":"m1"}`
+	if code, _ := r.do(t, "POST", "/api/internal/approvals", r.tok["main"], call); code != 403 {
+		t.Fatalf("trusted main: %d", code)
+	}
+	if code := user("PATCH", "/api/bots/pm-a", `{"mode":"guarded"}`); code != 200 {
+		t.Fatalf("patch mode: %d", code)
+	}
+	if b, _ := r.st.Bot("pm-a"); b.Mode != store.ModeGuarded {
+		t.Fatalf("mode %q", b.Mode)
+	}
+	code, out := r.do(t, "POST", "/api/internal/approvals", r.tok["main"], call)
+	if code != 200 || out["verdict"] != "pending" {
+		t.Fatalf("guarded main: %d %v", code, out)
+	}
+	id := strconv.FormatInt(int64(out["id"].(float64)), 10)
+	it, _ := r.st.Item(int64(out["id"].(float64)))
+	if it.GoalID != 0 || it.JobID != 0 || it.BotID != "pm-a" {
+		t.Fatalf("scope %+v", it)
+	}
+	// Another bot's main session and the bot's own job cannot see it.
+	for _, who := range []string{"other", "job"} {
+		if code, _ := r.do(t, "POST", "/api/internal/approvals/"+id+"/status", r.tok[who], `{}`); code != 404 {
+			t.Fatalf("%s saw it: %d", who, code)
+		}
+	}
+	if _, out = r.do(t, "POST", "/api/internal/approvals/"+id+"/status", r.tok["main"], `{"toolCallId":"m1"}`); out["verdict"] != "pending" {
+		t.Fatalf("before decision: %v", out)
+	}
+	if code := user("POST", "/api/inbox/"+id, `{"action":"approve"}`); code != 200 {
+		t.Fatalf("approve: %d", code)
+	}
+	if _, out = r.do(t, "POST", "/api/internal/approvals/"+id+"/status", r.tok["main"], `{"toolCallId":"m1"}`); out["verdict"] != "run" {
+		t.Fatalf("after approve: %v", out)
+	}
+	if _, out = r.do(t, "POST", "/api/internal/approvals/"+id+"/status", r.tok["main"], `{"toolCallId":"m1"}`); out["verdict"] != "gone" {
+		t.Fatalf("single use: %v", out)
+	}
+	if code := user("POST", "/api/inbox/"+id, `{"action":"approve"}`); code != 409 {
+		t.Fatalf("double approve: %d", code)
+	}
+}

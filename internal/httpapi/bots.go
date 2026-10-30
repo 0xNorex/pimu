@@ -171,7 +171,8 @@ func firstNonEmpty(a ...string) string {
 
 // handleBotPatch overlays the body. A new name reaches pi now if it is running
 // (set_session_name), else via --name on next start. A new persona applies on
-// the next pi start, so an idle process is released.
+// the next pi start, so an idle process is released; so does the safety mode
+// (a running turn keeps its mode until the process restarts).
 func (s *Server) handleBotPatch(w http.ResponseWriter, r *http.Request) {
 	old, err := s.st.Bot(r.PathValue("id"))
 	if err != nil {
@@ -195,7 +196,7 @@ func (s *Server) handleBotPatch(w http.ResponseWriter, r *http.Request) {
 		if b.Name != old.Name {
 			_, _ = s.hub.Call(r.Context(), run, map[string]any{"type": "set_session_name", "name": b.Name}, 30*time.Second)
 		}
-		if (b.Persona != old.Persona || b.Cwd != old.Cwd) && !run.Streaming() {
+		if (b.Persona != old.Persona || b.Cwd != old.Cwd || b.Mode != old.Mode) && !run.Streaming() {
 			s.hub.Release(r.Context(), b.SessionID)
 		}
 	}

@@ -287,3 +287,33 @@ func TestGateMainSession(t *testing.T) {
 		t.Fatalf("tools %v", r.Tools)
 	}
 }
+
+// Guarded main session: the L2 gate, waiting for the user in the chat;
+// dangerous commands ask (the user is present); pimu_task keeps working.
+func TestGateGuardedMainSession(t *testing.T) {
+	w := newWorld(t)
+	a := &api{t: t, tok: strings.Repeat("78", 32)}
+	env := map[string]string{"PIMU_BOT_ID": "pm-a", "PIMU_MODE": "guarded"}
+	r := run(t, w, env, a, []tc{
+		{Tool: "read", Input: map[string]any{"path": "a.txt"}, Cwd: w.work, want: "allow"},
+		{Tool: "bash", Input: map[string]any{"command": "git status"}, Cwd: w.work, want: "allow"},
+		{Tool: "pimu_task", Input: map[string]any{"title": "t", "prompt": "p"}, Cwd: w.work, want: "allow"},
+		{Tool: "bash", Input: map[string]any{"command": "ls -la /"}, Cwd: w.work, ID: "m1", want: "allow"},             // asks, waits, runs
+		{Tool: "bash", Input: map[string]any{"command": "rm -rf junk"}, Cwd: w.work, ID: "m2", want: "allow"},          // asks, not refused
+		{Tool: "write", Input: map[string]any{"path": "/tmp/x", "content": "x"}, Cwd: w.work, ID: "m3", want: "allow"}, // asks
+		{Tool: "read", Input: map[string]any{"path": "~/.ssh/k"}, Cwd: w.work, want: "block"},
+		{Tool: "bash", Input: map[string]any{"command": "cat /proc/self/environ"}, Cwd: w.work, want: "block"},
+	})
+	if strings.Join(r.Tools, ",") != "pimu_task" {
+		t.Fatalf("guarded main must keep pimu_task: %v", r.Tools)
+	}
+	if len(a.asks) != 3 || a.status != 3 {
+		t.Fatalf("asks %d polls %d, want 3 and 3", len(a.asks), a.status)
+	}
+	if !strings.Contains(r.Out[6], "[pimu guarded]") {
+		t.Fatalf("tag: %q", r.Out[6])
+	}
+	// A denial blocks.
+	d := &api{t: t, tok: strings.Repeat("9a", 32), next: "denied"}
+	run(t, w, env, d, []tc{{Tool: "bash", Input: map[string]any{"command": "id"}, Cwd: w.work, want: "block"}})
+}

@@ -19,14 +19,14 @@ type Props = {
 }
 
 export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
-  const [f, setF] = useState({ name: '', description: '', persona: '', cwd: '' })
+  const [f, setF] = useState({ name: '', description: '', persona: '', cwd: '', mode: 'trusted' as Bot['mode'] })
   const [workdirs, setWorkdirs] = useState<string[]>([])
   const [busy, setBusy] = useState(false)
   const set = (k: keyof typeof f, v: string) => setF((x) => ({ ...x, [k]: v }))
 
   useEffect(() => {
     if (!open) return
-    setF(bot ? { name: bot.name, description: bot.description, persona: bot.persona, cwd: bot.cwd } : { name: '', description: '', persona: '', cwd: '' })
+    setF(bot ? { name: bot.name, description: bot.description, persona: bot.persona, cwd: bot.cwd, mode: bot.mode ?? 'trusted' } : { name: '', description: '', persona: '', cwd: '', mode: 'trusted' })
     api<{ workdirs: string[] }>('/api/workdirs').then((r) => setWorkdirs(r.workdirs)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bot, adopt?.id, adopt?.name])
@@ -75,6 +75,30 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
           <div className="grid gap-2">
             <Label htmlFor="bot-persona">人设 / 指令</Label>
             <Textarea id="bot-persona" value={f.persona} onChange={(e) => set('persona', e.target.value)} rows={5} placeholder="它是谁、怎么说话、要遵守什么" className="text-base" />
+          </div>
+          <div className="grid gap-2">
+            <Label>安全模式</Label>
+            <div role="radiogroup" className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ['trusted', 'Trusted · 原生', '原生 Pi 行为（默认），不拦截工具调用'],
+                  ['guarded', 'Guarded · 门控', 'L2 门控：越界的写入和命令先在对话里等你批准'],
+                ] as const
+              ).map(([v, label, hint]) => (
+                <button
+                  key={v}
+                  type="button"
+                  role="radio"
+                  aria-checked={f.mode === v}
+                  onClick={() => setF((x) => ({ ...x, mode: v }))}
+                  className={`min-h-11 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${f.mode === v ? 'border-primary bg-primary/5' : 'text-muted-foreground'}`}
+                >
+                  <div className="font-medium text-foreground">{label}</div>
+                  <div className="text-xs">{hint}</div>
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">两种模式都不是系统沙箱：L2 是应用层门控，Pi 仍有本机用户的权限。切换在空闲时立刻生效，正在回复时从下一次启动生效。</p>
           </div>
           <Collapsible>
             <CollapsibleTrigger type="button" className="group flex min-h-11 items-center gap-1 text-sm text-muted-foreground">

@@ -86,6 +86,7 @@ export type Bot = {
   persona: string
   cwd: string
   archived: boolean
+  mode: 'trusted' | 'guarded'
   createdAt: string
   updatedAt: string
   status: SessionSummary['status']
@@ -197,4 +198,5 @@ export type Job = {
   createdAt: string
   startedAt: string | null
   finishedAt: string | null
+  approvals: { approval_count: number; approved: number; denied: number; expired: number; pending: number }
 }
