@@ -19,7 +19,7 @@ export function BotAvatar({ id, className }: { id: string; className?: string })
         if (x < 2) cells.push([4 - x, y])
       }
   return (
-    <span aria-hidden className={cn('flex size-11 shrink-0 overflow-hidden rounded-full', className)} style={{ background: `hsl(${hue} 45% 92%)` }}>
+    <span aria-hidden className={cn('flex size-11 shrink-0 overflow-hidden rounded-full ring-1 ring-black/5 ring-inset dark:ring-white/10', className)} style={{ background: `hsl(${hue} 45% 92%)` }}>
       <svg viewBox="-1 -1 7 7" className="size-full" shapeRendering="crispEdges">
         {cells.map(([x, y]) => (
           <rect key={`${x}-${y}`} x={x} y={y} width={1} height={1} fill={`hsl(${hue} 60% 48%)`} />

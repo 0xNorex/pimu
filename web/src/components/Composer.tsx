@@ -180,7 +180,7 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
 
   return (
     <div
-      className={`border-t bg-background px-3 pt-2 pb-[max(env(safe-area-inset-bottom),8px)] ${dragging ? 'ring-2 ring-primary ring-inset' : ''}`}
+      className="mx-auto w-full max-w-3xl px-3 pt-1 pb-[max(env(safe-area-inset-bottom),10px)]"
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -189,7 +189,7 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
       onDrop={onDrop}
     >
       {matches.length > 0 && (
-        <ul className="mb-2 max-h-56 overflow-y-auto rounded-md border bg-popover text-sm" role="listbox" aria-label="命令">
+        <ul className="msg-in mb-2 max-h-56 overflow-y-auto rounded-xl border bg-popover text-sm shadow-soft" role="listbox" aria-label="命令">
           {matches.map((c) => (
             <li key={c.name}>
               <button
@@ -211,11 +211,11 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
       {atts.length > 0 && (
         <div className="mb-2 flex gap-2 overflow-x-auto pb-1" aria-label="附件">
           {atts.map((a) => (
-            <div key={a.key} className="relative shrink-0">
+            <div key={a.key} className="msg-in relative shrink-0">
               {a.url ? (
-                <img src={a.url} alt={a.file.name} className="size-16 rounded-lg border object-cover" />
+                <img src={a.url} alt={a.file.name} className="size-16 rounded-xl border object-cover shadow-soft" />
               ) : (
-                <div className="flex h-16 w-44 items-center gap-2 rounded-lg border bg-muted/40 px-2.5">
+                <div className="flex h-16 w-44 items-center gap-2 rounded-xl border bg-card px-2.5 shadow-soft">
                   {a.busy ? <Loader2Icon className="size-5 shrink-0 animate-spin motion-reduce:animate-none" /> : <FileIcon className="size-5 shrink-0 text-muted-foreground" />}
                   <span className="min-w-0 text-xs">
                     <span className="block truncate font-medium">{a.file.name}</span>
@@ -241,8 +241,8 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
           e.target.value = ''
         }}
       />
-      <div className="flex items-end gap-1.5">
-        <Button size="icon" variant="ghost" className="size-11 shrink-0" aria-label="添加图片或文件" title="添加图片或文件" onClick={() => picker.current?.click()} disabled={disabled}>
+      <div className={`flex items-end gap-0.5 rounded-[24px] border bg-card p-1 shadow-soft transition-shadow focus-within:ring-3 focus-within:ring-ring/25 ${dragging ? 'ring-2 ring-primary' : ''}`}>
+        <Button size="icon" variant="ghost" className="size-10 shrink-0 rounded-full text-muted-foreground" aria-label="添加图片或文件" title="添加图片或文件" onClick={() => picker.current?.click()} disabled={disabled}>
           <PaperclipIcon />
         </Button>
         <Textarea
@@ -254,25 +254,25 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
           disabled={disabled}
           rows={1}
           placeholder={disabled ? '只读' : listening ? '正在听…' : streaming ? '追加消息…' : `发消息给 ${name ?? '助手'}`}
-          className="max-h-48 min-h-11 resize-none text-base"
+          className="max-h-48 min-h-10 resize-none border-0 bg-transparent px-1.5 py-2 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
           aria-label="消息"
         />
         {SpeechRecognition && (
-          <Button size="icon" variant={listening ? 'destructive' : 'ghost'} className={`size-11 shrink-0 ${listening ? 'animate-pulse motion-reduce:animate-none' : ''}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title="语音输入（中文）" onClick={mic} disabled={disabled}>
+          <Button size="icon" variant={listening ? 'destructive' : 'ghost'} className={`size-10 shrink-0 rounded-full ${listening ? 'animate-pulse motion-reduce:animate-none' : 'text-muted-foreground'}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title="语音输入（中文）" onClick={mic} disabled={disabled}>
             <MicIcon />
           </Button>
         )}
         {streaming && (
           <>
-            <Button size="icon" variant="outline" className="size-11" aria-label="引导（steer）：本轮工具执行后插入" onClick={() => void send('steer')} disabled={!canSend}>
+            <Button size="icon" variant="ghost" className="size-10 rounded-full" aria-label="引导（steer）：本轮工具执行后插入" onClick={() => void send('steer')} disabled={!canSend}>
               <CornerDownRightIcon />
             </Button>
-            <Button size="icon" variant="destructive" className="size-11" aria-label="停止" onClick={onAbort}>
+            <Button size="icon" variant="destructive" className="size-10 rounded-full" aria-label="停止" onClick={onAbort}>
               <SquareIcon />
             </Button>
           </>
         )}
-        <Button size="icon" className="size-11" aria-label={streaming ? '排队发送（followUp）' : '发送'} onClick={() => void send(streaming ? 'followUp' : undefined)} disabled={!canSend}>
+        <Button size="icon" className="size-10 rounded-full transition-[transform,opacity] disabled:scale-90" aria-label={streaming ? '排队发送（followUp）' : '发送'} onClick={() => void send(streaming ? 'followUp' : undefined)} disabled={!canSend}>
           <ArrowUpIcon />
         </Button>
       </div>

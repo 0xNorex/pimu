@@ -5,7 +5,7 @@ import type { AssistantMessage, ImageBlock, Message, ToolResultMessage } from '.
 export type Item =
   | { kind: 'user'; key: string; text: string; images: ImageBlock[] }
   | { kind: 'text'; key: string; text: string; live: boolean }
-  | { kind: 'thinking'; key: string; text: string }
+  | { kind: 'thinking'; key: string; text: string; live: boolean }
   | { kind: 'tool'; key: string; tool: ToolView; ts: number }
   | { kind: 'group'; key: string; tools: ToolView[] }
   | { kind: 'error'; key: string; text: string }
@@ -35,7 +35,7 @@ function flatten(messages: Message[], draft: AssistantMessage | null, tools: Rec
     m.content.forEach((b, bi) => {
       const key = `${k}-${bi}`
       if (b.type === 'text' && (b.text || live)) flat.push({ kind: 'text', key, text: b.text, live })
-      else if (b.type === 'thinking' && b.thinking) flat.push({ kind: 'thinking', key, text: b.thinking })
+      else if (b.type === 'thinking' && b.thinking) flat.push({ kind: 'thinking', key, text: b.thinking, live: live && bi === m.content.length - 1 })
       else if (b.type === 'toolCall') {
         const r = results.get(b.id)
         const t = tools[b.id]

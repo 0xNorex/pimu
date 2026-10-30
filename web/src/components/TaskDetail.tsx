@@ -148,7 +148,7 @@ export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col">
+    <main className="page-in flex min-w-0 flex-1 flex-col">
       <PageHeader title={isNew ? '新建任务' : (task?.name ?? '任务')} back="#/tasks" backAlways>
         {!isNew && (
           <Button variant="outline" className="min-h-11" onClick={() => void runNow()}>

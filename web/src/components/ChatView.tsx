@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowDownIcon, ChevronLeftIcon, EllipsisVerticalIcon, RotateCcwIcon } from 'lucide-react'
+import { haptic } from '@/lib/theme'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
@@ -103,6 +104,7 @@ export function ChatView({ id }: { id: string }) {
       await api(`/api/sessions/${id}/prompt`, { message, behavior, images })
       dispatch({ type: 'clear_exit' })
       setAtBottom(true)
+      haptic()
       return true
     } catch (e) {
       toast.error(errMsg(e))
@@ -141,8 +143,8 @@ export function ChatView({ id }: { id: string }) {
   const model = detail?.state?.model?.provider !== 'unknown' ? detail?.state?.model?.name || modelName || detail?.state?.model?.id : undefined
 
   return (
-    <div className="flex h-full min-w-0 flex-1 flex-col">
-      <header className="flex items-center gap-1 border-b px-2 pt-[env(safe-area-inset-top)]">
+    <div className="page-in flex h-full min-w-0 flex-1 flex-col">
+      <header className="z-10 flex items-center gap-1 border-b bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
           <ChevronLeftIcon />
         </Button>
@@ -151,7 +153,7 @@ export function ChatView({ id }: { id: string }) {
           <span className="min-w-0">
             <span className="block truncate text-[15px] font-medium">{title}</span>
             <span className="block truncate text-xs text-muted-foreground" aria-live="polite">
-              {s.streaming ? `正在回复… ${elapsed}s` : bot?.description || model || ''}
+              {s.streaming ? <span className="shimmer">正在回复… {elapsed}s</span> : bot?.description || model || ''}
             </span>
           </span>
         </button>
@@ -172,7 +174,7 @@ export function ChatView({ id }: { id: string }) {
       </header>
       <ConnectionBanner connected={connected} lock={s.lock} />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-        <TabsList className="mx-3 mt-2 self-start">
+        <TabsList className="mx-auto mt-2 w-fit">
           <TabsTrigger value="chat">对话</TabsTrigger>
           {bot && <TabsTrigger value="tasks">任务</TabsTrigger>}
           <TabsTrigger value="activity">活动</TabsTrigger>
@@ -183,14 +185,17 @@ export function ChatView({ id }: { id: string }) {
               {!s.loaded && [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
               {s.loaded && items.length === 0 && (
                 <div className="py-12 text-center text-sm text-muted-foreground">
-                  {bot && <BotAvatar id={bot.id} className="mx-auto mb-3 size-16" />}
-                  <p className="font-medium text-foreground">{bot?.name ?? '新对话'}</p>
+                  {bot && <BotAvatar id={bot.id} className="mx-auto mb-3 size-20 shadow-soft" />}
+                  <p className="text-lg font-semibold tracking-tight text-foreground">{bot?.name ?? '新对话'}</p>
                   <p className="mt-1">{bot?.description || '发条消息开始。'}</p>
                 </div>
               )}
               {items.map((it) => (
-                <MessageItem key={it.key} item={it} />
+                <div key={it.key} className="msg-in">
+                  <MessageItem item={it} />
+                </div>
               ))}
+              {s.streaming && items[items.length - 1]?.kind === 'user' && <p className="msg-in shimmer text-[13px]">思考中…</p>}
               {s.exit && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
                   <p className="font-medium text-destructive">pi 进程退出（code {s.exit.code}）</p>
@@ -204,11 +209,16 @@ export function ChatView({ id }: { id: string }) {
               )}
             </div>
           </div>
-          {!atBottom && (
-            <Button size="sm" variant="secondary" className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full shadow" onClick={() => setAtBottom(true)}>
-              <ArrowDownIcon /> 新消息
-            </Button>
-          )}
+          <Button
+            size="sm"
+            variant="secondary"
+            aria-hidden={atBottom}
+            tabIndex={atBottom ? -1 : 0}
+            className={`absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full border bg-popover/90 shadow-soft backdrop-blur transition-[opacity,transform] duration-200 ${atBottom ? 'pointer-events-none translate-y-2 scale-95 opacity-0' : 'opacity-100'}`}
+            onClick={() => setAtBottom(true)}
+          >
+            <ArrowDownIcon /> {s.streaming ? '回到最新' : '到底部'}
+          </Button>
         </TabsContent>
         {bot && (
           <TabsContent value="tasks" className="min-h-0 flex-1 overflow-y-auto">

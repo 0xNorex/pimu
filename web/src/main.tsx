@@ -4,6 +4,19 @@ import { toast } from 'sonner'
 import App from './App.tsx'
 import './index.css'
 
+// iOS Safari doesn't shrink the layout viewport for the keyboard; track the visual
+// viewport so the composer stays above it (no-op elsewhere: heights match).
+const vv = window.visualViewport
+if (vv) {
+  const fit = () => {
+    document.documentElement.style.setProperty('--app-h', `${vv.height}px`)
+    if (vv.offsetTop > 0) window.scrollTo(0, 0)
+  }
+  vv.addEventListener('resize', fit)
+  vv.addEventListener('scroll', fit)
+  fit()
+}
+
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <App />

@@ -39,7 +39,7 @@ export function TasksPage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col">
+    <main className="page-in flex min-w-0 flex-1 flex-col">
       <PageHeader title="任务" back="#/">
         <Button size="icon" className="size-11" aria-label="新建任务" onClick={() => go('#/tasks/new')}>
           <PlusIcon />

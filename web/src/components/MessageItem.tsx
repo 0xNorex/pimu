@@ -16,13 +16,13 @@ const Md = memo(function Md({ text }: { text: string }) {
   )
 })
 
-function ThinkingBlock({ text }: { text: string }) {
+function ThinkingBlock({ text, live }: { text: string; live: boolean }) {
   return (
     <Collapsible>
       <CollapsibleTrigger className="group flex min-h-11 items-center gap-2 text-[13px] text-muted-foreground">
         <ChevronRightIcon className="size-4 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none" />
         <BrainIcon className="size-4" />
-        思考 · {text.length} 字
+        <span className={live ? 'shimmer' : undefined}>{live ? '思考中' : '思考'} · {text.length} 字</span>
       </CollapsibleTrigger>
       <CollapsibleContent className="whitespace-pre-wrap border-l-2 pl-3 text-[13px] text-muted-foreground">{text}</CollapsibleContent>
     </Collapsible>
@@ -72,13 +72,13 @@ export function MessageItem({ item }: { item: Item }) {
             {item.images.length > 0 && (
               <div className="flex flex-wrap justify-end gap-1.5">
                 {item.images.map((im, i) => (
-                  <img key={i} src={`data:${im.mimeType};base64,${im.data}`} alt="图片" className="max-h-48 max-w-full rounded-xl border object-cover" />
+                  <img key={i} src={`data:${im.mimeType};base64,${im.data}`} alt="图片" className="max-h-48 max-w-full rounded-2xl border object-cover shadow-soft" />
                 ))}
               </div>
             )}
-            {body && <div className="whitespace-pre-wrap break-words rounded-2xl bg-muted px-3.5 py-2">{body}</div>}
+            {body && <div className="rounded-[20px] rounded-br-md bg-bubble px-3.5 py-2 break-words whitespace-pre-wrap text-bubble-foreground shadow-soft">{body}</div>}
             {files.map((f) => (
-              <div key={f.path} title={f.path} className="flex max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+              <div key={f.path} title={f.path} className="flex max-w-full items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm shadow-soft">
                 <FileIcon className="size-4 shrink-0 text-muted-foreground" />
                 <span className="truncate">{f.name}</span>
               </div>
@@ -94,7 +94,7 @@ export function MessageItem({ item }: { item: Item }) {
         </div>
       )
     case 'thinking':
-      return <ThinkingBlock text={item.text} />
+      return <ThinkingBlock text={item.text} live={item.live} />
     case 'tool':
       return <ToolCallRow tool={item.tool} />
     case 'group':
