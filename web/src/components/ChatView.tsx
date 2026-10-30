@@ -10,7 +10,7 @@ import { textOf } from '@/lib/format'
 import { go } from '@/lib/route'
 import { initialStore, reducer } from '@/lib/store'
 import { buildItems, toolActivity } from '@/lib/timeline'
-import type { SessionDetail } from '@/lib/types'
+import type { Model, SessionDetail } from '@/lib/types'
 import { useSessionEvents } from '@/lib/useSessionEvents'
 import { ActivityList } from './ActivityList'
 import { Composer } from './Composer'
@@ -38,6 +38,16 @@ export function ChatView({ id }: { id: string }) {
   const scroller = useRef<HTMLDivElement>(null)
   const connected = useSessionEvents(id, dispatch, setDetail)
   const elapsed = useElapsed(s.streaming ? s.runStartedAt : null)
+
+  // Idle sessions report only provider/id (read from the session file); look up the display name.
+  const [modelName, setModelName] = useState<string>()
+  const idleModel = detail?.state?.model && !detail.state.model.name ? `${detail.state.model.provider}/${detail.state.model.id}` : ''
+  useEffect(() => {
+    if (!idleModel) return
+    api<{ models: Model[] }>('/api/models')
+      .then((r) => setModelName(r.models.find((m) => `${m.provider}/${m.id}` === idleModel)?.name))
+      .catch(() => {})
+  }, [idleModel])
 
   const refreshDetail = useCallback(() => {
     api<SessionDetail>(`/api/sessions/${id}`).then(setDetail).catch(() => {})
@@ -99,7 +109,7 @@ export function ChatView({ id }: { id: string }) {
   const lastUser = [...s.messages].reverse().find((m) => m.role === 'user')
 
   const title = detail?.state?.sessionName || detail?.name || id
-  const model = detail?.state?.model?.provider !== 'unknown' ? detail?.state?.model?.name : undefined
+  const model = detail?.state?.model?.provider !== 'unknown' ? detail?.state?.model?.name || modelName || detail?.state?.model?.id : undefined
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
