@@ -119,14 +119,14 @@ func TestApprovalFlowOverHTTP(t *testing.T) {
 	if code, _ := r.do(t, "POST", "/api/internal/approvals", r.tok["main"], `{"tool":"bash","args":{"command":"x"}}`); code != 403 {
 		t.Fatalf("main session files no approvals: %d", code)
 	}
-	req := `{"tool":"write","args":{"path":"/etc/x","content":"Bearer abcdefgh123"},"reason":"/etc/x","toolCallId":"c1"}`
+	req := `{"tool":"write","args":{"path":"/etc/x","content":"Bearer abcdefgh123"},"reason":"curl -H Bearer abcdefgh123 & co","toolCallId":"c1"}`
 	code, out := r.do(t, "POST", "/api/internal/approvals", r.tok["job"], req)
 	if code != 200 || out["verdict"] != "pending" {
 		t.Fatalf("first: %d %v", code, out)
 	}
 	id := int64(out["id"].(float64))
 	it, _ := r.st.Item(id)
-	if it.JobID != r.job || it.BotID != r.bot || strings.Contains(it.Body, "abcdefgh123") {
+	if it.JobID != r.job || it.BotID != r.bot || strings.Contains(it.Body+it.Title, "abcdefgh123") || !strings.Contains(it.Title, "& co") || strings.Contains(it.Body, `\u0026`) {
 		t.Fatalf("item %+v", it)
 	}
 	if j, _ := r.st.Job(r.job); j.Status != "waiting_approval" {

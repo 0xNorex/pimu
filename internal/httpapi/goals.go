@@ -442,9 +442,13 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	if body.Args == nil {
 		body.Args = map[string]any{}
 	}
-	shown, _ := json.MarshalIndent(mask(map[string]any(body.Args)), "", "  ") // never show credentials
+	var shown strings.Builder // masked (never show credentials), & and < kept readable
+	enc := json.NewEncoder(&shown)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(mask(map[string]any(body.Args)))
 	it, verdict, isNew, err := s.st.Approve(store.Item{BotID: sc.Bot, GoalID: sc.Goal, JobID: sc.Job, ArgsHash: ArgsHash(sc, body.Tool, body.Args), Tool: body.Tool,
-		Title: clipText(fmt.Sprintf("想调用 %s：%s", body.Tool, body.Reason), 200), Body: clipText(string(shown), 4000)}, sc.Session+"/"+body.ToolCallID)
+		Title: clipText(fmt.Sprintf("想调用 %s：%s", body.Tool, maskText(body.Reason)), 200), Body: clipText(maskText(strings.TrimSpace(shown.String())), 4000)}, sc.Session+"/"+body.ToolCallID)
 	if err != nil {
 		writeErr(w, 500, "db_error", err.Error())
 		return
