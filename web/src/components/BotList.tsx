@@ -60,7 +60,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
     const unread = b.id !== activeId && b.lastRole === 'assistant' && isUnread(b.id, b.updatedAt)
     return (
       <a key={b.id} href={`#/s/${b.id}`} className={`flex items-center gap-3 px-3 py-2.5 hover:bg-muted/60 ${b.id === activeId ? 'bg-muted' : ''}`}>
-        <BotAvatar emoji={b.emoji} className="size-12" />
+        <BotAvatar id={b.id} className="size-12" />
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline gap-2">
             <span className={`min-w-0 flex-1 truncate text-[15px] ${unread ? 'font-semibold' : 'font-medium'}`}>{b.name}</span>
@@ -124,7 +124,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
               const b = r.sessionId ? byId.get(r.sessionId) : undefined
               return (
                 <a key={r.id} href={r.sessionId ? `#/s/${r.sessionId}` : `#/tasks/${r.taskId}`} className="flex min-h-11 items-center gap-2 px-3 py-2 hover:bg-muted/60">
-                  {b ? <span aria-hidden>{b.emoji}</span> : <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />}
+                  {b ? <BotAvatar id={b.id} className="size-5" /> : <CalendarClockIcon className="size-4 shrink-0 text-muted-foreground" />}
                   <span className="min-w-0 flex-1 truncate text-sm">
                     {b ? `${b.name} · ` : ''}
                     {r.taskName}

@@ -286,7 +286,7 @@ export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
                     <SelectContent>
                       {bots.filter((b) => !b.archived || b.id === form.sessionId).map((b) => (
                         <SelectItem key={b.id} value={b.id}>
-                          {b.emoji} {b.name}
+                          {b.name}
                         </SelectItem>
                       ))}
                       {form.sessionId && !bots.some((b) => b.id === form.sessionId) && <SelectItem value={form.sessionId}>{form.sessionId}</SelectItem>}

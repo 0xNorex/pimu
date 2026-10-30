@@ -147,7 +147,7 @@ export function ChatView({ id }: { id: string }) {
           <ChevronLeftIcon />
         </Button>
         <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-1 text-left" onClick={() => (bot ? setEditBot(true) : setInfo(true))} aria-label={bot ? '编辑 Bot' : '详情'}>
-          {bot && <BotAvatar emoji={bot.emoji} className="size-9 text-xl" />}
+          {bot && <BotAvatar id={bot.id} className="size-9" />}
           <span className="min-w-0">
             <span className="block truncate text-[15px] font-medium">{title}</span>
             <span className="block truncate text-xs text-muted-foreground" aria-live="polite">
@@ -183,7 +183,7 @@ export function ChatView({ id }: { id: string }) {
               {!s.loaded && [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
               {s.loaded && items.length === 0 && (
                 <div className="py-12 text-center text-sm text-muted-foreground">
-                  {bot && <BotAvatar emoji={bot.emoji} className="mx-auto mb-3 size-16 text-4xl" />}
+                  {bot && <BotAvatar id={bot.id} className="mx-auto mb-3 size-16" />}
                   <p className="font-medium text-foreground">{bot?.name ?? '新对话'}</p>
                   <p className="mt-1">{bot?.description || '发条消息开始。'}</p>
                 </div>

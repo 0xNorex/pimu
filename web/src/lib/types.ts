@@ -82,7 +82,6 @@ export type SessionSummary = {
 export type Bot = {
   id: string
   name: string
-  emoji: string
   description: string
   persona: string
   cwd: string
