@@ -1,6 +1,6 @@
 # NOW
 
-V1–V8 built, 2026-10-30.
+V1–V9 built, 2026-10-30.
 
 - V1: Go server (pi RPC, lock, SSE replay, auth, reaper, `pimu release`), PWA chat.
 - V2: SQLite tasks/runs, cron/manual runs, retry, restart recovery, Telegram, memory page.
@@ -16,7 +16,7 @@ V1–V8 built, 2026-10-30.
 - Not verified: iPhone Safari by hand (Web Speech in Home Screen app, keyboard fit),
   systemd/cloudflared, real Telegram delivery.
 - Known gaps: guard in rpc mode only flags shutdown; screenshots with a `filename` arg
-  return no image; unread marks are per device (localStorage); no tests by choice.
+  return no image; unread marks are per device (localStorage).
 - Measured: pimu RSS ≈ 11 MB; each pi ≈ 117–123 MB → `PIMU_MAX_PROCS=3` fits 2C3G.
 - V7 (design): docs/SLASH.md, docs/AUTONOMY.md.
 - V8: sessions first (+ = new session, 设为 Bot on any session, home grouped by cwd);
@@ -34,3 +34,7 @@ V1–V8 built, 2026-10-30.
 - Known P1 limits: an approval hash, once used, blocks the identical call again; an
   approved but never re-called approval stays approved; bot main sessions carry the
   internal token in env (needed by `pimu_task`), so the model could read it via `env`.
+- V9 (local hardening, docs/V9.md): scoped capability tokens instead of the server
+  token in children; single-use, scoped, expiring approvals; stricter gate; `go test ./...`
+  with a fake pi. Real-model checklist 8/8 passed on the box (skills loading and live
+  nested tools not exercised). The P1 limits above are fixed; open risks are in docs/V9.md.
