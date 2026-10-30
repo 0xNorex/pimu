@@ -59,7 +59,7 @@
 | HTTP | 标准库 `net/http`（1.22+ 路由模式 `GET /api/x/{id}`） | 零依赖 |
 | 实时 | **SSE（GET）+ 普通 POST** | 单向推送足够；`EventSource` 自动重连 + `Last-Event-ID`；Cloudflare Tunnel 友好；不需要 WebSocket 依赖 |
 | 存储 | SQLite，`modernc.org/sqlite` v1.61.0（纯 Go，免 CGO） | 交叉编译/部署简单；数据量极小，性能差异无关。`mattn/go-sqlite3` v1.14.52 需 CGO，弃 |
-| 何时用 SQLite | **V2 才建库**，只有 `tasks`、`runs` 两张表 | 会话归 pi，V1 没有需要持久化的东西 |
+| 何时用 SQLite | **V2 才建库**：`tasks`、`runs`；V4 加一张小表 `bots`（只存 pi 会话文件放不下的展示信息：emoji、简介、人设、cwd、归档、名字） | 会话、模型、系统提示、压缩仍归 pi；Bot 就是 pi 会话 |
 | Cron | `github.com/robfig/cron/v3` v3.0.1（V2） | 事实标准，稳定多年不变 |
 | Telegram | 标准库直接调 Bot API `sendMessage`（V2，仅出站通知） | 一个 HTTP POST，不值得引库 |
 | Browser | pi 侧配置 `@playwright/mcp`（V3） | Pi 仍是唯一 Agent；Pimu 只展示截图/记录 |
