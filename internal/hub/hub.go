@@ -369,20 +369,37 @@ func (h *Hub) Models(ctx context.Context) (json.RawMessage, error) {
 	if h.models != nil && time.Since(h.modelsAt) < 10*time.Minute {
 		return h.models, nil
 	}
+	data, err := h.Query(ctx, "get_available_models")
+	if err != nil {
+		return nil, err
+	}
+	h.models, h.modelsAt = data, time.Now()
+	return data, nil
+}
+
+// ForgetModels drops the cached model list (after pi's config changed).
+func (h *Hub) ForgetModels() {
+	h.modelsMu.Lock()
+	h.models = nil
+	h.modelsMu.Unlock()
+}
+
+// Query runs one read-only RPC command (e.g. get_commands) in a throwaway pi
+// started in $HOME, so it reflects the user-level configuration.
+func (h *Hub) Query(ctx context.Context, typ string) (json.RawMessage, error) {
 	home, _ := os.UserHomeDir()
 	p, err := pirpc.Start(h.cfg.PiBin, []string{"--mode", "rpc", "--no-session"}, home, os.Environ(), func([]byte) {})
 	if err != nil {
 		return nil, err
 	}
 	defer p.Close()
-	resp, err := p.Call(ctx, map[string]any{"type": "get_available_models"}, cmdTimeout)
+	resp, err := p.Call(ctx, map[string]any{"type": typ}, cmdTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("get_available_models: %w", err)
+		return nil, fmt.Errorf("%s: %w", typ, err)
 	}
 	if !resp.Success {
 		return nil, errors.New(resp.Error)
 	}
-	h.models, h.modelsAt = resp.Data, time.Now()
 	return resp.Data, nil
 }
 

@@ -72,6 +72,13 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/runs", s.handleRuns)
 	api.HandleFunc("GET /api/memory", s.handleMemoryGet)
 	api.HandleFunc("PUT /api/memory", s.handleMemoryPut)
+	api.HandleFunc("GET /api/settings", s.handleSettingsGet)
+	api.HandleFunc("PATCH /api/settings/model", s.handleSettingsModel)
+	api.HandleFunc("PATCH /api/settings/extension", s.handleSettingsExtension)
+	api.HandleFunc("PATCH /api/settings/mcp/{name}", s.handleSettingsMCP)
+	api.HandleFunc("GET /api/settings/mcp/status", s.handleMCPStatus)
+	api.HandleFunc("GET /api/settings/commands", s.handleSettingsCommands)
+	api.HandleFunc("GET /api/settings/skill", s.handleSettingsSkill)
 	api.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { writeErr(w, 404, "not_found", "no such endpoint") })
 
 	mux := http.NewServeMux()

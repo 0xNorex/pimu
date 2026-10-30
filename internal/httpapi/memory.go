@@ -62,25 +62,36 @@ func (s *Server) handleMemoryPut(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, 409, map[string]any{"error": "conflict", "message": "文件已被其他程序修改，请重新加载后再保存", "mtime": mt})
 		return
 	}
-	// write-then-rename so pi never reads a half-written file
-	tmp, err := os.CreateTemp(filepath.Dir(p), ".AGENTS.md.*")
-	if err == nil {
-		_, err = tmp.WriteString(body.Content)
-		if cerr := tmp.Close(); err == nil {
-			err = cerr
-		}
-		if err == nil {
-			_ = os.Chmod(tmp.Name(), 0o644)
-			err = os.Rename(tmp.Name(), p)
-		}
-		if err != nil {
-			os.Remove(tmp.Name())
-		}
-	}
-	if err != nil {
+	if err := writeAtomic(p, []byte(body.Content), 0o644); err != nil {
 		writeErr(w, 500, "io_error", err.Error())
 		return
 	}
 	mt, _ = mtimeOf(p)
 	writeJSON(w, 200, map[string]any{"path": p, "mtime": mt})
+}
+
+// writeAtomic writes via temp file + rename so pi never reads a half-written
+// file. An existing file keeps its permissions.
+func writeAtomic(p string, data []byte, mode os.FileMode) error {
+	if st, err := os.Stat(p); err == nil {
+		mode = st.Mode().Perm()
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(p), "."+filepath.Base(p)+".*")
+	if err != nil {
+		return err
+	}
+	_, err = tmp.Write(data)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), mode)
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), p)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+	}
+	return err
 }
