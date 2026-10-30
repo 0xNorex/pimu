@@ -217,10 +217,112 @@
 /* Bot list reorder uses the View Transitions API when present. */
 ::view-transition-group(*) { animation-duration: 260ms; animation-timing-function: var(--ease-out); }
 
+/* ---- V14 motion. Springs via overshooting cubic-beziers; transforms and opacity only (compositor-friendly). ---- */
+:root { --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1); --ease-snap: cubic-bezier(0.2, 0.9, 0.1, 1); }
+
+/* Sidebar segmented tabs: the pill slides with a little overshoot. */
+.seg-pill { transition: transform 420ms var(--ease-spring); will-change: transform; }
+.panel-in-r { animation: pimu-panel-r 260ms var(--ease-out) both; }
+.panel-in-l { animation: pimu-panel-l 260ms var(--ease-out) both; }
+@keyframes pimu-panel-r { from { opacity: 0; transform: translateX(14px); } }
+@keyframes pimu-panel-l { from { opacity: 0; transform: translateX(-14px); } }
+/* List rows rise one after another (--i is the row index, capped). */
+.row-in { animation: pimu-rise 340ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 22ms); }
+/* A row that moved tabs is already animated by the View Transition; don't replay the entry. */
+.no-anim, .no-anim .row-in { animation: none; }
+/* Phones with View Transitions get push / pop instead (below). */
+@supports (view-transition-name: none) { @media (max-width: 1023.98px) { .page-in { animation: none; } } }
+
+/* Badges pop in; a count that changed because a row moved here bumps. */
+.dot-in { animation: pimu-pop 360ms var(--ease-spring) both; }
+@keyframes pimu-pop { from { transform: scale(0); opacity: 0; } }
+.count-bump { animation: pimu-bump 560ms var(--ease-spring); }
+@keyframes pimu-bump { 30% { transform: scale(1.4); } }
+
+/* A bot at work: a comet ring orbits its avatar. */
+.avatar-working::before {
+  content: ""; position: absolute; inset: -3px; border-radius: 999px;
+  background: conic-gradient(from 0deg, transparent 0 55%, color-mix(in oklch, var(--primary) 30%, transparent) 75%, var(--primary) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 2px));
+  animation: pimu-spin 1.4s linear infinite;
+}
+@keyframes pimu-spin { to { transform: rotate(1turn); } }
+
+/* Waiting on you: a soft amber halo breathes. */
+.attention { animation: pimu-attn 2s ease-in-out infinite; }
+@keyframes pimu-attn { 0%, 100% { box-shadow: 0 0 0 0 oklch(0.77 0.16 70 / 0); } 50% { box-shadow: 0 0 0 4px oklch(0.77 0.16 70 / 22%); } }
+/* Approval card: lands with a nudge, then pulses its border twice. */
+.attention-card { animation: pimu-card-in 420ms var(--ease-spring) both, pimu-card-ring 1.6s 420ms ease-in-out 2; }
+@keyframes pimu-card-in { from { opacity: 0; transform: translateY(10px) scale(0.98); } }
+@keyframes pimu-card-ring { 50% { box-shadow: 0 0 0 4px oklch(0.77 0.16 70 / 25%); } }
+
+/* Live dot with a ping. */
+.live-dot { position: relative; width: 6px; height: 6px; border-radius: 999px; background: oklch(0.7 0.17 155); }
+.live-dot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: inherit; animation: pimu-ping 1.6s var(--ease-out) infinite; }
+@keyframes pimu-ping { 75%, 100% { transform: scale(2.6); opacity: 0; } }
+
+/* Bell swings once when unread mail shows up. */
+.bell-ring { transform-origin: 50% 10%; animation: pimu-bell 900ms var(--ease-out) 1; }
+@keyframes pimu-bell { 15% { transform: rotate(14deg); } 30% { transform: rotate(-12deg); } 45% { transform: rotate(8deg); } 60% { transform: rotate(-4deg); } 75% { transform: rotate(0); } }
+
+/* Brand mark: a small aurora tile that turns on hover. */
+.brand-mark { width: 18px; height: 18px; border-radius: 6px; background: conic-gradient(from 210deg, var(--primary), oklch(0.75 0.14 200), oklch(0.8 0.13 120), oklch(0.72 0.16 25), var(--primary)); box-shadow: inset 0 0 0 1px oklch(1 0 0 / 25%); transition: transform 600ms var(--ease-spring); }
+.idle-mark { animation: pimu-float 4s ease-in-out infinite; box-shadow: inset 0 0 0 1px oklch(1 0 0 / 25%), 0 12px 32px -8px color-mix(in oklch, var(--primary) 45%, transparent); }
+h1:hover > .brand-mark { transform: rotate(90deg) scale(1.08); }
+
+/* Empty Bot tab: three identicons float out of sync. */
+.empty-stack > span { animation: pimu-float 3.2s ease-in-out infinite; animation-delay: calc(var(--i) * -1.1s); }
+@keyframes pimu-float { 50% { transform: translateY(-5px); } }
+
+/* Collapsible: height from Radix's measured var. */
+.collapsible-anim { overflow: hidden; }
+.collapsible-anim[data-state="open"] { animation: pimu-open 240ms var(--ease-out); }
+.collapsible-anim[data-state="closed"] { animation: pimu-close 180ms var(--ease-out); }
+@keyframes pimu-open { from { height: 0; opacity: 0; } to { height: var(--radix-collapsible-content-height); } }
+@keyframes pimu-close { from { height: var(--radix-collapsible-content-height); } to { height: 0; opacity: 0; } }
+
+/* Thinking: three dots hop in turn. */
+.thinking-dots { display: inline-flex; gap: 3px; margin-right: 6px; vertical-align: middle; }
+.thinking-dots > i { width: 5px; height: 5px; border-radius: 999px; background: var(--primary); animation: pimu-hop 1.1s var(--ease-out) infinite; }
+.thinking-dots > i:nth-child(2) { animation-delay: 140ms; }
+.thinking-dots > i:nth-child(3) { animation-delay: 280ms; }
+@keyframes pimu-hop { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+/* Your own message launches from the composer corner. */
+.msg-user { animation: pimu-launch 380ms var(--ease-spring) both; transform-origin: 100% 100%; }
+@keyframes pimu-launch { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
+
+/* Send button: springs up when there is something to send. */
+.send-btn { transition: transform 360ms var(--ease-spring), opacity 200ms, background-color 200ms; }
+.send-btn:disabled { transform: scale(0.86); }
+.send-btn:not(:disabled):active { transform: scale(0.9); transition-duration: 90ms; }
+
+/* Dialogs pop with a spring; bottom sheets glide up. */
+[data-slot="dialog-content"][data-state="open"], [data-slot="alert-dialog-content"][data-state="open"] { animation: pimu-dialog 300ms var(--ease-spring) both; }
+@keyframes pimu-dialog { from { opacity: 0; transform: translateY(8px) scale(0.96); } }
+[data-slot="sheet-content"][data-side="bottom"][data-state="open"] { animation: pimu-sheet 360ms var(--ease-snap) both; }
+@keyframes pimu-sheet { from { transform: translateY(100%); } }
+
+/* Phone: home <-> chat as a push / pop (View Transitions). */
+html[data-vt="push"]::view-transition-old(root) { animation: 320ms var(--ease-snap) both pimu-vt-out-l; }
+html[data-vt="push"]::view-transition-new(root) { animation: 320ms var(--ease-snap) both pimu-vt-in-r; }
+html[data-vt="pop"]::view-transition-old(root) { animation: 300ms var(--ease-snap) both pimu-vt-out-r; z-index: 1; }
+html[data-vt="pop"]::view-transition-new(root) { animation: 300ms var(--ease-snap) both pimu-vt-in-l; }
+@keyframes pimu-vt-out-l { to { transform: translateX(-28%); opacity: 0.6; } }
+@keyframes pimu-vt-in-r { from { transform: translateX(100%); } }
+@keyframes pimu-vt-out-r { to { transform: translateX(100%); } }
+@keyframes pimu-vt-in-l { from { transform: translateX(-28%); opacity: 0.6; } }
+html[data-vt="push"] .vt-row, html[data-vt="pop"] .vt-row { view-transition-name: none !important; }
+/* Rows changing tabs: morph position, crossfade content. */
+html[data-vt="move"]::view-transition-group(*) { animation-duration: 420ms; animation-timing-function: var(--ease-spring); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
   .shimmer { color: var(--muted-foreground); background: none; }
+  .avatar-working::before { animation: none; background: var(--primary); }
+  .seg-pill { transition: none; }
 }
 html, body, #root { height: 100%; }
 /* iOS: main.tsx pins the app to the visual viewport so the composer rides above the keyboard. */

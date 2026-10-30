@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 export function PageHeader({ title, back, backAlways, flush, children }: { title: ReactNode; back: string; backAlways?: boolean; flush?: boolean; children?: ReactNode }) {
   return (
     <header className={`z-10 box-content flex h-14 shrink-0 items-center gap-1 bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl ${flush ? '' : 'border-b'} ${backAlways ? '' : 'lg:px-3'}`}>
-      <Button asChild size="icon" variant="ghost" className={`size-10 ${backAlways ? 'lg:size-9' : 'lg:hidden'}`} aria-label="返回">
+      <Button asChild size="icon" variant="ghost" className={`size-11 ${backAlways ? 'lg:size-9' : 'lg:hidden'}`} aria-label="返回">
         <a href={back}>
           <ChevronLeftIcon />
         </a>

@@ -31,7 +31,7 @@ export function ChatApprovals({ botId }: { botId: string }) {
   return (
     <div className="mx-auto w-full max-w-3xl space-y-2 px-4 pb-2">
       {items.map((it) => (
-        <div key={it.id} role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm shadow-soft dark:border-amber-700 dark:bg-amber-950/40">
+        <div key={it.id} role="alert" className="attention-card rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm shadow-soft dark:border-amber-700 dark:bg-amber-950/40">
           <div className="flex items-center gap-2 font-medium">
             <ShieldAlertIcon className="size-4 shrink-0 text-amber-600" />
             <span className="min-w-0 flex-1 truncate">

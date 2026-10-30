@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { flushSync } from 'react-dom'
+import { transition } from './bus'
 
 export type Route =
   | { name: 'login' }
@@ -24,10 +26,23 @@ function parse(hash: string): Route {
   return { name: 'list' }
 }
 
+// How deep a page sits: shallower is "back" (pop), deeper or sideways is "push".
+const depth = (r: Route) => (r.name === 'list' ? 0 : r.name === 'task' ? 2 : 1)
+const narrow = () => typeof matchMedia !== 'undefined' && !matchMedia('(min-width: 1024px)').matches
+
 export function useHashRoute(): Route {
   const [route, setRoute] = useState(() => parse(location.hash))
+  const cur = useRef(route)
   useEffect(() => {
-    const on = () => setRoute(parse(location.hash))
+    // Phone: going deeper slides the new page in from the right; going back slides it away.
+    const on = () => {
+      const next = parse(location.hash)
+      const prev = cur.current
+      cur.current = next
+      const apply = () => flushSync(() => setRoute(next))
+      if (!narrow() || next.name === 'login' || prev.name === 'login' || (prev.name === next.name && next.name !== 'session')) return apply()
+      transition(apply, depth(next) < depth(prev) ? 'pop' : 'push')
+    }
     window.addEventListener('hashchange', on)
     return () => window.removeEventListener('hashchange', on)
   }, [])

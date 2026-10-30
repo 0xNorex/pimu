@@ -251,7 +251,7 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
         }}
       />
       <div className={`flex items-end gap-0.5 rounded-[24px] border bg-card p-1 shadow-soft transition-shadow focus-within:ring-3 focus-within:ring-ring/25 ${dragging ? 'ring-2 ring-primary' : ''}`}>
-        <Button size="icon" variant="ghost" className="size-10 shrink-0 rounded-full text-muted-foreground" aria-label="添加图片或文件" title="添加图片或文件" onClick={() => picker.current?.click()} disabled={disabled}>
+        <Button size="icon" variant="ghost" className="size-11 lg:size-10 shrink-0 rounded-full text-muted-foreground" aria-label="添加图片或文件" title="添加图片或文件" onClick={() => picker.current?.click()} disabled={disabled}>
           <PaperclipIcon />
         </Button>
         <Textarea
@@ -267,21 +267,21 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
           aria-label="消息"
         />
         {SpeechRecognition && (
-          <Button size="icon" variant={listening ? 'destructive' : 'ghost'} className={`size-10 shrink-0 rounded-full ${listening ? 'animate-pulse motion-reduce:animate-none' : 'text-muted-foreground'}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title="语音输入（中文）" onClick={mic} disabled={disabled}>
+          <Button size="icon" variant={listening ? 'destructive' : 'ghost'} className={`size-11 lg:size-10 shrink-0 rounded-full ${listening ? 'animate-pulse motion-reduce:animate-none' : 'text-muted-foreground'}`} aria-label={listening ? '停止语音输入' : '语音输入'} aria-pressed={listening} title="语音输入（中文）" onClick={mic} disabled={disabled}>
             <MicIcon />
           </Button>
         )}
         {streaming && (
           <>
-            <Button size="icon" variant="ghost" className="size-10 rounded-full" aria-label="引导（steer）：本轮工具执行后插入" onClick={() => void send('steer')} disabled={!canSend}>
+            <Button size="icon" variant="ghost" className="size-11 lg:size-10 rounded-full" aria-label="引导（steer）：本轮工具执行后插入" onClick={() => void send('steer')} disabled={!canSend}>
               <CornerDownRightIcon />
             </Button>
-            <Button size="icon" variant="destructive" className="size-10 rounded-full" aria-label="停止" onClick={onAbort}>
+            <Button size="icon" variant="destructive" className="size-11 lg:size-10 rounded-full" aria-label="停止" onClick={onAbort}>
               <SquareIcon />
             </Button>
           </>
         )}
-        <Button size="icon" className="size-10 rounded-full transition-[transform,opacity] disabled:scale-90" aria-label={streaming ? '排队发送（followUp）' : '发送'} onClick={() => void send(streaming ? 'followUp' : undefined)} disabled={!canSend}>
+        <Button size="icon" className="send-btn size-11 rounded-full lg:size-10" aria-label={streaming ? '排队发送（followUp）' : '发送'} onClick={() => void send(streaming ? 'followUp' : undefined)} disabled={!canSend}>
           <ArrowUpIcon />
         </Button>
       </div>

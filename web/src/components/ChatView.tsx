@@ -19,6 +19,7 @@ import { useSessionEvents } from '@/lib/useSessionEvents'
 import { ActivityList } from './ActivityList'
 import { BotAvatar } from './BotAvatar'
 import { BotDialog } from './BotDialog'
+import { botsChanged } from '@/lib/bus'
 import { BotTasks } from './BotTasks'
 import { BotGoals } from './BotGoals'
 import { BotJobs } from './BotJobs'
@@ -91,6 +92,9 @@ export function ChatView({ id }: { id: string }) {
   }, [s.procState, s.streaming, refreshDetail])
 
   const items = useMemo(() => buildItems(s.messages, s.draft, s.tools, s.streaming), [s.messages, s.draft, s.tools, s.streaming])
+  // Messages present at load just fade in; ones sent afterwards get the launch animation.
+  const firstN = useRef(Infinity)
+  if (s.loaded && firstN.current === Infinity) firstN.current = items.length
   const activity = useMemo(() => (tab === 'activity' ? toolActivity(s.messages, s.draft, s.tools, s.streaming) : []), [tab, s.messages, s.draft, s.tools, s.streaming])
 
   const onScroll = () => {
@@ -222,6 +226,7 @@ export function ChatView({ id }: { id: string }) {
     try {
       await api(`/api/bots/${id}`, {}, 'DELETE')
       setBot(null)
+      botsChanged({ id, bot: false })
       toast.success('已取消 Bot', { description: '会话和对话都还在，回到按目录分组的会话列表里。' })
     } catch (e) {
       toast.error(errMsg(e))
@@ -235,7 +240,7 @@ export function ChatView({ id }: { id: string }) {
   return (
     <div className="page-in flex h-full min-w-0 flex-1 flex-col">
       <header className="z-10 box-content flex h-14 shrink-0 items-center gap-1 bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <Button variant="ghost" size="icon" className="size-10 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
+        <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
           <ChevronLeftIcon />
         </Button>
         <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1.5 pl-1 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none lg:pl-2" onClick={() => (bot ? setEditBot(true) : setInfo(true))} aria-label={bot ? '编辑 Bot' : '详情'}>
@@ -249,7 +254,7 @@ export function ChatView({ id }: { id: string }) {
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-10 lg:size-9" aria-label="会话菜单">
+            <Button variant="ghost" size="icon" className="size-11 lg:size-9" aria-label="会话菜单">
               <EllipsisVerticalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -297,11 +302,11 @@ export function ChatView({ id }: { id: string }) {
                 </div>
               )}
               {items.map((it, i) => (
-                <div key={it.key} className={STEP.has(it.kind) && STEP.has(items[i - 1]?.kind) ? 'msg-in -mt-2.5' : 'msg-in'}>
+                <div key={it.key} className={`${it.kind === 'user' && i >= firstN.current ? 'msg-user' : 'msg-in'}${STEP.has(it.kind) && STEP.has(items[i - 1]?.kind) ? ' -mt-2.5' : ''}`}>
                   <MessageItem item={it} />
                 </div>
               ))}
-              {s.streaming && items[items.length - 1]?.kind === 'user' && <p className="msg-in shimmer text-[13px]">思考中…</p>}
+              {s.streaming && items[items.length - 1]?.kind === 'user' && <p className="msg-in text-[13px]" role="status"><span className="thinking-dots" aria-hidden><i /><i /><i /></span><span className="shimmer">思考中</span></p>}
               {s.exit && (
                 <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
                   <p className="font-medium text-destructive">pi 进程退出（code {s.exit.code}）</p>
