@@ -173,13 +173,13 @@ func (s *Store) InterruptJobs() (int64, error) {
 		return 0, err
 	}
 	n, _ := res.RowsAffected()
-	_, err = s.db.Exec(`UPDATE inbox SET status = 'expired' WHERE kind = 'approval' AND status IN ('new','read')
+	_, err = s.db.Exec(`UPDATE inbox SET status = 'expired' WHERE kind = 'approval' AND status IN ('new','read','approved')
 		AND job_id IN (SELECT id FROM jobs WHERE status NOT IN ('running','waiting_approval'))`)
 	return n, err
 }
 
 // ExpireJobItems closes approvals a finished job can no longer use.
 func (s *Store) ExpireJobItems(jobID int64) error {
-	_, err := s.db.Exec(`UPDATE inbox SET status = 'expired' WHERE job_id = ? AND kind = 'approval' AND status IN ('new','read')`, jobID)
+	_, err := s.db.Exec(`UPDATE inbox SET status = 'expired' WHERE job_id = ? AND kind = 'approval' AND status IN ('new','read','approved')`, jobID)
 	return err
 }

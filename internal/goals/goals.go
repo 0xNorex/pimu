@@ -6,8 +6,6 @@ package goals
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xNorex/pimu/internal/caps"
 	"github.com/0xNorex/pimu/internal/hub"
 	"github.com/0xNorex/pimu/internal/notify"
 	"github.com/0xNorex/pimu/internal/store"
@@ -46,7 +45,7 @@ type Service struct {
 	dataDir   string
 	publicURL string
 	apiURL    string
-	Token     string // PIMU_INTERNAL_TOKEN for pimu-agent.ts; scoped to /api/internal/*
+	Now       func() time.Time // clock; tests replace it
 
 	ctx  context.Context
 	wake chan int64
@@ -55,10 +54,8 @@ type Service struct {
 }
 
 func New(st *store.Store, h *hub.Hub, tk *tasks.Service, tg notify.Telegram, dataDir, publicURL, addr string) *Service {
-	b := make([]byte, 24)
-	_, _ = rand.Read(b)
 	return &Service{st: st, hub: h, tasks: tk, tg: tg, dataDir: dataDir, publicURL: publicURL, apiURL: "http://" + addr,
-		Token: hex.EncodeToString(b), wake: make(chan int64, 16), busy: map[int64]bool{}}
+		Now: time.Now, wake: make(chan int64, 16), busy: map[int64]bool{}}
 }
 
 // ---- files
@@ -136,7 +133,7 @@ func (s *Service) Extras(id string) (args, env []string) {
 		goalID = s.st.TaskGoal(tid)
 	} else if _, err := s.st.Bot(id); err == nil {
 		// pimu_task (delegation) needs to reach Pimu from the bot session.
-		return nil, []string{"PIMU_BOT_DIR=" + s.BotDir(id), "PIMU_BOT_ID=" + id, "PIMU_API=" + s.apiURL, "PIMU_INTERNAL_TOKEN=" + s.Token}
+		return nil, []string{"PIMU_BOT_DIR=" + s.BotDir(id), "PIMU_BOT_ID=" + id, "PIMU_API=" + s.apiURL}
 	}
 	if goalID == 0 {
 		return nil, nil
@@ -150,13 +147,34 @@ func (s *Service) Extras(id string) (args, env []string) {
 		"PIMU_GOAL=" + strconv.FormatInt(g.ID, 10),
 		"PIMU_LEVEL=" + strconv.Itoa(min(g.Level, 2)), // L3 is P2
 		"PIMU_API=" + s.apiURL,
-		"PIMU_INTERNAL_TOKEN=" + s.Token,
 	}
 	if beat != "" {
 		env = append(env, "PIMU_BEAT="+beat)
 		args = []string{"--name", "♥ " + g.Title}
 	}
 	return args, env
+}
+
+// Scope is what a session's capability token may act on (internal/caps):
+// heartbeats and goal subtasks their goal, a bot's main session its bot.
+func (s *Service) Scope(id string) (caps.Scope, bool) {
+	var goalID int64
+	if m := beatID.FindStringSubmatch(id); m != nil {
+		goalID, _ = strconv.ParseInt(m[1], 10, 64)
+	} else if m := taskRunID.FindStringSubmatch(id); m != nil {
+		tid, _ := strconv.ParseInt(m[1], 10, 64)
+		goalID = s.st.TaskGoal(tid)
+	} else if _, err := s.st.Bot(id); err == nil {
+		return caps.Scope{Session: id, Bot: id}, true
+	}
+	if goalID == 0 {
+		return caps.Scope{}, false
+	}
+	g, err := s.st.Goal(goalID)
+	if err != nil {
+		return caps.Scope{}, false
+	}
+	return caps.Scope{Session: id, Bot: g.BotID, Goal: g.ID}, true
 }
 
 // ---- scheduling
@@ -244,7 +262,7 @@ func inHours(spec string, t time.Time) bool {
 // Precheck is the zero-token gate. It returns "" when a beat should start,
 // otherwise the reason it should not.
 func (s *Service) Precheck(g store.Goal, force bool) string {
-	now := time.Now()
+	now := s.Now()
 	if !g.Enabled {
 		return "目标已停用"
 	}
@@ -565,7 +583,7 @@ func (s *Service) apply(g store.Goal, bot store.Bot, beat int64, text string) st
 			}
 			_ = writeFile(filepath.Join(s.GoalDir(g), "STATE.md"), md)
 		case "finding":
-			appendFile(filepath.Join(s.GoalDir(g), "findings.md"), fmt.Sprintf("- %s %s", time.Now().Format("2006-01-02 15:04"), oneLine(a.MD)))
+			appendFile(filepath.Join(s.GoalDir(g), "findings.md"), fmt.Sprintf("- %s %s", s.Now().Format("2006-01-02 15:04"), oneLine(a.MD)))
 		default:
 			continue
 		}
@@ -587,7 +605,7 @@ func (s *Service) finish(g store.Goal, beat int64, status string, tokens int, ou
 		slog.Error("finish beat", "beat", beat, "err", err)
 	}
 	every := time.Duration(max(g.EverySec, 60)) * time.Second
-	_ = s.st.SetNextAt(g.ID, time.Now().Add(every))
+	_ = s.st.SetNextAt(g.ID, s.Now().Add(every))
 	s.log(g, fmt.Sprintf("beat #%d %s %d tok [%s] %s", beat, status, tokens, outcome, clip(oneLine(summary), 200)))
 	slog.Info("beat finished", "goal", g.ID, "beat", beat, "status", status, "tokens", tokens, "outcome", outcome)
 	if status == "budget" || status == "error" {
@@ -613,8 +631,8 @@ func (s *Service) finish(g store.Goal, beat int64, status string, tokens int, ou
 }
 
 func (s *Service) log(g store.Goal, line string) {
-	appendFile(filepath.Join(s.BotDir(g.BotID), "log", time.Now().Format("2006-01-02")+".md"),
-		fmt.Sprintf("- %s [%s] %s", time.Now().Format("15:04:05"), g.Slug, line))
+	appendFile(filepath.Join(s.BotDir(g.BotID), "log", s.Now().Format("2006-01-02")+".md"),
+		fmt.Sprintf("- %s [%s] %s", s.Now().Format("15:04:05"), g.Slug, line))
 }
 
 // alert pushes a new inbox item: SSE badge now, Telegram (outbound only) with

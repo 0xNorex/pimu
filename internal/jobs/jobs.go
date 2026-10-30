@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xNorex/pimu/internal/caps"
 	"github.com/0xNorex/pimu/internal/hub"
 	"github.com/0xNorex/pimu/internal/store"
 )
@@ -65,6 +66,20 @@ func (s *Service) Extras(id string) (args, env []string, ok bool) {
 	return []string{"--name", "⇢ " + j.Title}, env, true
 }
 
+// Scope limits a job session's capability token to its own job and bot.
+func (s *Service) Scope(id string) (caps.Scope, bool) {
+	m := sessionRe.FindStringSubmatch(id)
+	if m == nil {
+		return caps.Scope{}, false
+	}
+	jid, _ := strconv.ParseInt(m[1], 10, 64)
+	j, err := s.st.Job(jid)
+	if err != nil {
+		return caps.Scope{}, false
+	}
+	return caps.Scope{Session: id, Bot: j.BotID, Job: j.ID}, true
+}
+
 func (s *Service) Start(ctx context.Context) {
 	s.ctx = ctx
 	if n, err := s.st.InterruptJobs(); err != nil {
@@ -108,6 +123,9 @@ func (s *Service) Create(botID, title, prompt string) (store.Job, int, error) {
 	s.mu.Lock()
 	pos += len(s.running)
 	s.mu.Unlock()
+	if cur, err := s.st.Job(j.ID); err == nil && cur.Status != "queued" {
+		pos = 0 // the scheduler already started it
+	}
 	s.publish(j.ID)
 	s.Wake()
 	return j, pos, nil
@@ -165,6 +183,9 @@ func (s *Service) run(ctx context.Context, j store.Job) (status, result, errText
 		}
 	}
 	if err != nil {
+		if ctx.Err() != nil { // cancelled (or timed out) while pi was starting
+			return s.stopped(ctx), "", map[string]string{"cancelled": "已取消", "failed": "超时（1 小时）"}[s.stopped(ctx)], 0
+		}
 		return "failed", "", err.Error(), 0
 	}
 	defer s.hub.Release(context.Background(), sid)
@@ -348,6 +369,12 @@ func (s *Service) Rerun(id int64) (store.Job, int, error) {
 	if err != nil {
 		return j, 0, err
 	}
+	switch j.Status {
+	case "done", "failed", "cancelled", "interrupted":
+	default:
+		return j, 0, fmt.Errorf("job #%d is %s; only a finished job can be rerun", id, j.Status)
+	}
+	// A new job id: approvals given to the old job do not carry over.
 	return s.Create(j.BotID, j.Title, j.Prompt)
 }
 

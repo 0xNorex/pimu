@@ -10,10 +10,12 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/0xNorex/pimu/internal/caps"
 	"github.com/0xNorex/pimu/internal/config"
 	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/httpapi"
@@ -65,6 +67,7 @@ func serve() error {
 	if err != nil {
 		return err
 	}
+	scrubSelf()
 	level := slog.LevelInfo
 	if cfg.LogLevel == "debug" {
 		level = slog.LevelDebug
@@ -97,7 +100,26 @@ func serve() error {
 	js := jobs.New(st, h, cfg.MaxJobs)
 	js.Alert = gs.Alert
 	js.BotEnv = func(bot string) []string {
-		return []string{"PIMU_BOT_DIR=" + gs.BotDir(bot), "PIMU_API=http://" + cfg.Addr, "PIMU_INTERNAL_TOKEN=" + gs.Token}
+		return []string{"PIMU_BOT_DIR=" + gs.BotDir(bot), "PIMU_API=http://" + cfg.Addr}
+	}
+	cp, err := caps.New(filepath.Join(cfg.DataDir, "run"))
+	if err != nil {
+		return err
+	}
+	h.SpawnEnv = func(id string) []string {
+		sc, ok := js.Scope(id)
+		if !ok {
+			sc, ok = gs.Scope(id)
+		}
+		if !ok {
+			return nil
+		}
+		kv, err := cp.Issue(sc)
+		if err != nil {
+			slog.Error("issue capability", "session", id, "err", err)
+			return nil
+		}
+		return []string{kv}
 	}
 	h.Lookup = func(id string) (string, []string, []string, bool) {
 		if args, env, ok := js.Extras(id); ok { // background job: fresh session in the bot's cwd
@@ -116,9 +138,11 @@ func serve() error {
 		}
 		return b.Cwd, args, env, true
 	}
+	api := httpapi.New(cfg, h, st, tk, gs, js, version, piVersion)
+	api.Caps = cp
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, h, st, tk, gs, js, version, piVersion).Handler(web.FS()),
+		Handler:           api.Handler(web.FS()),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -169,4 +193,21 @@ func release(id string) error {
 	}
 	fmt.Println("released", id)
 	return nil
+}
+
+// scrubSelf keeps Pimu's own secrets away from the processes it starts and
+// from same-user processes (the commands a model runs): every PIMU_* variable
+// is dropped from the environment children inherit, and the process is made
+// non-dumpable so /proc/<pimu>/environ and /proc/<pimu>/mem (which still hold
+// the original environment, e.g. PIMU_TOKEN) are readable only by root.
+func scrubSelf() {
+	for _, kv := range os.Environ() {
+		if k, _, _ := strings.Cut(kv, "="); strings.HasPrefix(k, "PIMU_") {
+			_ = os.Unsetenv(k)
+		}
+	}
+	const prSetDumpable = 4
+	if _, _, e := syscall.RawSyscall(syscall.SYS_PRCTL, prSetDumpable, 0, 0); e != 0 {
+		slog.Warn("prctl(PR_SET_DUMPABLE, 0) failed", "err", e)
+	}
 }

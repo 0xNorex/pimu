@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -66,6 +67,9 @@ type Hub struct {
 	// yet (a new bot; ok reports whether cwd is known), extra pi args (a bot's
 	// persona) and extra env (PIMU_* for bots, heartbeats, goal tasks). Optional.
 	Lookup func(id string) (cwd string, args, env []string, ok bool)
+	// SpawnEnv adds env for one pi process about to start (its capability
+	// file, see internal/caps). Optional.
+	SpawnEnv func(id string) []string
 
 	// Global carries cross-session events (proc_state with id, run_update) for /api/events.
 	Global *Stream
@@ -192,11 +196,14 @@ func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Ru
 	r := &Run{ID: id, Cwd: cwd, lastActive: time.Now()}
 	args := append([]string{"--mode", "rpc"}, sessArgs...)
 	args = append(args, h.cfg.PiArgs...)
-	env := append(os.Environ(), "PIMU_LOCK_OWNER="+id)
+	env := append(ChildEnv(os.Environ()), "PIMU_LOCK_OWNER="+id)
 	if h.Lookup != nil {
 		_, extra, extraEnv, _ := h.Lookup(id)
 		args = append(args, extra...)
 		env = append(env, extraEnv...)
+	}
+	if h.SpawnEnv != nil {
+		env = append(env, h.SpawnEnv(id)...)
 	}
 	proc, err := pirpc.Start(h.cfg.PiBin, args, cwd, env, func(line []byte) { h.onEvent(r, stream, line) })
 	if err != nil {
@@ -268,6 +275,19 @@ func (h *Hub) watch(r *Run, s *Stream) {
 	pimuEvent(s, ev)
 	pimuEvent(s, map[string]any{"type": "lock", "holder": "none"})
 	h.Broadcast(map[string]any{"type": "proc_state", "id": r.ID, "state": "exited", "code": code})
+}
+
+// ChildEnv is Pimu's environment minus everything pi must not inherit: every
+// PIMU_* variable (the login token, Telegram token, ...). pi's tools pass the
+// environment on to the commands the model runs, so it must hold no secret.
+func ChildEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, kv := range env {
+		if !strings.HasPrefix(kv, "PIMU_") {
+			out = append(out, kv)
+		}
+	}
+	return out
 }
 
 // Broadcast publishes a pimu event on the global stream.
@@ -389,7 +409,7 @@ func (h *Hub) ForgetModels() {
 // started in $HOME, so it reflects the user-level configuration.
 func (h *Hub) Query(ctx context.Context, typ string) (json.RawMessage, error) {
 	home, _ := os.UserHomeDir()
-	p, err := pirpc.Start(h.cfg.PiBin, []string{"--mode", "rpc", "--no-session"}, home, os.Environ(), func([]byte) {})
+	p, err := pirpc.Start(h.cfg.PiBin, []string{"--mode", "rpc", "--no-session"}, home, ChildEnv(os.Environ()), func([]byte) {})
 	if err != nil {
 		return nil, err
 	}

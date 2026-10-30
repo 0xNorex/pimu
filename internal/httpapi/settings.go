@@ -14,6 +14,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/0xNorex/pimu/internal/hub"
 )
 
 // Settings is a thin window onto pi's own files (settings.json, models.json,
@@ -313,6 +315,7 @@ func (s *Server) handleMCPStatus(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	home, _ := os.UserHomeDir()
 	cmd := exec.CommandContext(ctx, s.cfg.PiBin, "mcp", "list", "--json")
+	cmd.Env = hub.ChildEnv(os.Environ())
 	cmd.Dir = home
 	out, _ := cmd.Output() // exits 1 when a server fails; JSON is still printed
 	var v any

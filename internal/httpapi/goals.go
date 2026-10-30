@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0xNorex/pimu/internal/caps"
 	"github.com/0xNorex/pimu/internal/store"
 )
 
@@ -392,48 +393,58 @@ func (s *Server) handleInboxDecide(w http.ResponseWriter, r *http.Request) {
 
 // ---- internal (pimu-agent.ts)
 
-func (s *Server) internalOK(w http.ResponseWriter, r *http.Request) bool {
-	if r.Method != http.MethodPost || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Pimu-Internal")), []byte(s.goals.Token)) != 1 {
-		writeErr(w, 403, "forbidden", "internal only")
-		return false
+// internalScope authenticates a pi process by its capability token
+// (internal/caps) and returns what it may act on.
+func (s *Server) internalScope(w http.ResponseWriter, r *http.Request) (caps.Scope, bool) {
+	if s.Caps != nil && r.Method == http.MethodPost {
+		if sc, ok := s.Caps.Check(r.Header.Get("X-Pimu-Cap")); ok {
+			return sc, true
+		}
 	}
-	return true
+	writeErr(w, 403, "forbidden", "internal only")
+	return caps.Scope{}, false
 }
 
-// handleApprovalRequest is deny-and-defer: the gate blocks the call and asks
-// for an approval row keyed by sha256(goal|tool|canonical args). The answer is
-// the row's status: new/read (pending), approved (allow once), used, denied.
+// ArgsHash binds an approval to one exact call: the bot, the goal or job it
+// runs under, the tool and its arguments (canonical JSON: keys sorted).
+func ArgsHash(sc caps.Scope, tool string, args map[string]any) string {
+	b, _ := json.Marshal(args)
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s\x00g%d\x00j%d\x00%s\x00%s", sc.Bot, sc.Goal, sc.Job, tool, b)))
+	return hex.EncodeToString(sum[:])
+}
+
+// handleApprovalRequest is asked by the gate for every call that needs the
+// user. The session's scope (not the request body) decides bot, goal and job,
+// and Pimu computes the hash itself. Verdict: run (approval claimed for this
+// one call), pending, denied, gone. See store/approvals.go for the lifecycle.
 func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
-	if !s.internalOK(w, r) {
+	sc, ok := s.internalScope(w, r)
+	if !ok {
+		return
+	}
+	if sc.Goal == 0 && sc.Job == 0 {
+		writeErr(w, 403, "forbidden", "only heartbeats, goal tasks and jobs ask for approval")
 		return
 	}
 	var body struct {
-		Goal     int64          `json:"goal"`
-		Job      int64          `json:"job"`
-		Tool     string         `json:"tool"`
-		ArgsHash string         `json:"argsHash"`
-		Args     map[string]any `json:"args"`
-		Reason   string         `json:"reason"`
+		Tool       string         `json:"tool"`
+		Args       map[string]any `json:"args"`
+		Reason     string         `json:"reason"`
+		ToolCallID string         `json:"toolCallId"`
 	}
 	if !readJSON(w, r, &body) {
 		return
 	}
-	if (body.Goal == 0) == (body.Job == 0) || body.Tool == "" || len(body.ArgsHash) != 64 {
-		writeErr(w, 400, "invalid", "goal or job, tool, argsHash required")
+	if body.Tool == "" {
+		writeErr(w, 400, "invalid", "tool required")
 		return
 	}
-	botID := ""
-	if body.Job != 0 {
-		j, err := s.st.Job(body.Job)
-		if err != nil {
-			writeErr(w, 404, "not_found", "job")
-			return
-		}
-		botID = j.BotID
+	if body.Args == nil {
+		body.Args = map[string]any{}
 	}
 	shown, _ := json.MarshalIndent(mask(map[string]any(body.Args)), "", "  ") // never show credentials
-	it, isNew, err := s.st.AddItem(store.Item{BotID: botID, GoalID: body.Goal, JobID: body.Job, Kind: "approval", DedupKey: "ap:" + body.ArgsHash,
-		Title: clipText(fmt.Sprintf("想调用 %s：%s", body.Tool, body.Reason), 200), Body: clipText(string(shown), 4000), Tool: body.Tool, ArgsHash: body.ArgsHash})
+	it, verdict, isNew, err := s.st.Approve(store.Item{BotID: sc.Bot, GoalID: sc.Goal, JobID: sc.Job, ArgsHash: ArgsHash(sc, body.Tool, body.Args), Tool: body.Tool,
+		Title: clipText(fmt.Sprintf("想调用 %s：%s", body.Tool, body.Reason), 200), Body: clipText(string(shown), 4000)}, sc.Session+"/"+body.ToolCallID)
 	if err != nil {
 		writeErr(w, 500, "db_error", err.Error())
 		return
@@ -441,38 +452,40 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	if isNew {
 		s.goals.Alert(it)
 	}
-	if body.Job != 0 && (it.Status == "new" || it.Status == "read") {
-		s.jobs.SetWaiting(body.Job, true) // the gate now polls until the user decides
+	if sc.Job != 0 && verdict == store.VerdictPending {
+		s.jobs.SetWaiting(sc.Job, true) // the gate now polls until the user decides
 	}
-	writeJSON(w, 200, map[string]any{"id": it.ID, "status": it.Status})
+	if verdict == store.VerdictRun {
+		s.hub.Broadcast(map[string]any{"type": "inbox"})
+	}
+	writeJSON(w, 200, map[string]any{"id": it.ID, "verdict": verdict})
 }
 
 // handleApprovalStatus is polled by a job's gate while it waits for the user.
 func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {
-	if !s.internalOK(w, r) {
+	sc, ok := s.internalScope(w, r)
+	if !ok {
 		return
 	}
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	var body struct {
+		ToolCallID string `json:"toolCallId"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 4096)).Decode(&body)
 	it, err := s.st.Item(id)
-	if err != nil {
+	if err != nil || it.Kind != "approval" || it.BotID != sc.Bot || it.GoalID != sc.Goal || it.JobID != sc.Job {
 		writeErr(w, 404, "not_found", "item")
 		return
 	}
-	writeJSON(w, 200, map[string]any{"id": it.ID, "status": it.Status})
-}
-
-func (s *Server) handleApprovalUsed(w http.ResponseWriter, r *http.Request) {
-	if !s.internalOK(w, r) {
-		return
-	}
-	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	ok, err := s.st.SetItemStatus(id, "used", "approved")
+	verdict, err := s.st.ApprovalStatus(id, sc.Session+"/"+body.ToolCallID)
 	if err != nil {
 		writeErr(w, 500, "db_error", err.Error())
 		return
 	}
-	s.hub.Broadcast(map[string]any{"type": "inbox"})
-	writeJSON(w, 200, map[string]bool{"ok": ok})
+	if verdict == store.VerdictRun {
+		s.hub.Broadcast(map[string]any{"type": "inbox"})
+	}
+	writeJSON(w, 200, map[string]any{"id": it.ID, "verdict": verdict})
 }
 
 func clipText(s string, n int) string {

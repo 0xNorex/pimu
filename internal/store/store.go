@@ -61,7 +61,7 @@ CREATE TABLE bots (
   archived     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-`, goalsSchema, jobsSchema}
+`, goalsSchema, jobsSchema, approvalsSchema}
 
 type Store struct{ db *sql.DB }
 
@@ -111,7 +111,11 @@ func Open(dir string) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-func now() string { return time.Now().UTC().Format("2006-01-02T15:04:05.000Z") }
+// Clock is the store's notion of now; tests replace it.
+var Clock = time.Now
+
+func now() string           { return ts(Clock()) }
+func ts(t time.Time) string { return t.UTC().Format("2006-01-02T15:04:05.000Z") }
 
 type Task struct {
 	ID          int64   `json:"id"`

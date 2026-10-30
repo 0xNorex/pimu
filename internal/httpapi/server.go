@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/0xNorex/pimu/internal/caps"
 	"github.com/0xNorex/pimu/internal/config"
 	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/hub"
@@ -31,6 +32,7 @@ type Server struct {
 	tasks     *tasks.Service
 	goals     *goals.Service
 	jobs      *jobs.Service
+	Caps      *caps.Registry // pi process capabilities for /api/internal/*
 	version   string
 	piVersion string
 	limiter   *limiter
@@ -98,8 +100,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/inbox/count", s.handleInboxCount)
 	api.HandleFunc("POST /api/inbox/read-all", s.handleInboxReadAll)
 	api.HandleFunc("POST /api/inbox/{id}", s.handleInboxDecide)
-	api.HandleFunc("POST /api/internal/approvals", s.handleApprovalRequest) // pimu-agent.ts, internal token
-	api.HandleFunc("POST /api/internal/approvals/{id}/used", s.handleApprovalUsed)
+	api.HandleFunc("POST /api/internal/approvals", s.handleApprovalRequest) // pimu-agent.ts, capability token
 	api.HandleFunc("POST /api/internal/approvals/{id}/status", s.handleApprovalStatus)
 	api.HandleFunc("POST /api/internal/jobs", s.handleJobDelegate)
 	api.HandleFunc("GET /api/bots/{id}/jobs", s.handleJobList)

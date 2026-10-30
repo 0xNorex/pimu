@@ -8,11 +8,15 @@ import (
 
 // handleJobDelegate is the pimu_task tool (pimu-agent.ts in a bot session).
 func (s *Server) handleJobDelegate(w http.ResponseWriter, r *http.Request) {
-	if !s.internalOK(w, r) {
+	sc, ok := s.internalScope(w, r)
+	if !ok {
+		return
+	}
+	if sc.Goal != 0 || sc.Job != 0 { // only a bot's main session delegates, and only to itself
+		writeErr(w, 403, "forbidden", "only a bot's main session can delegate")
 		return
 	}
 	var body struct {
-		Bot    string `json:"bot"`
 		Title  string `json:"title"`
 		Prompt string `json:"prompt"`
 	}
@@ -27,7 +31,7 @@ func (s *Server) handleJobDelegate(w http.ResponseWriter, r *http.Request) {
 	if body.Title == "" {
 		body.Title = clipText(body.Prompt, 30)
 	}
-	j, pos, err := s.jobs.Create(body.Bot, clipText(body.Title, 80), clipText(body.Prompt, 20000))
+	j, pos, err := s.jobs.Create(sc.Bot, clipText(body.Title, 80), clipText(body.Prompt, 20000))
 	if err != nil {
 		writeErr(w, 400, "invalid", err.Error())
 		return
