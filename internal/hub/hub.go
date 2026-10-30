@@ -35,11 +35,27 @@ type Run struct {
 	ID   string
 	Cwd  string
 	proc *pirpc.Proc
+	gone chan struct{} // closed once watch has dropped the run and its lock
 
 	mu         sync.Mutex
 	streaming  bool
 	lastActive time.Time
 	timeouts   int
+	closing    bool // being stopped: callers wait for gone and start afresh
+}
+
+// stop closes the process; Ensure treats the run as gone from now on.
+func (r *Run) stop() {
+	r.mu.Lock()
+	r.closing = true
+	r.mu.Unlock()
+	r.proc.Close()
+}
+
+func (r *Run) isClosing() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.closing
 }
 
 func (r *Run) Streaming() bool {
@@ -154,7 +170,14 @@ func (h *Hub) CreateWithID(ctx context.Context, id, cwd string) (*Run, error) {
 // Ensure returns the running process for id, starting it if needed.
 func (h *Hub) Ensure(ctx context.Context, id string) (*Run, error) {
 	if r := h.Running(id); r != nil {
-		return r, nil
+		if !r.isClosing() {
+			return r, nil
+		}
+		select { // stopping (bot edit, eviction): wait, then start a fresh one
+		case <-r.gone:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	if info, ok := h.Idx.Find(id); ok {
 		return h.start(ctx, id, info.Cwd, []string{"--session", info.Path})
@@ -173,13 +196,30 @@ func (h *Hub) Ensure(ctx context.Context, id string) (*Run, error) {
 
 func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Run, error) {
 	h.mu.Lock()
-	if r := h.runs[id]; r != nil {
+	for {
+		if r := h.runs[id]; r != nil {
+			h.mu.Unlock()
+			if !r.isClosing() {
+				return r, nil
+			}
+			<-r.gone
+			h.mu.Lock()
+			continue
+		}
+		if len(h.runs) < h.cfg.MaxProcs {
+			break
+		}
+		// Full: make room by stopping the least recently used idle process
+		// (it restarts from its session file on the next message). Without
+		// this a background job or heartbeat waits for the idle reaper.
+		victim := h.idlest()
 		h.mu.Unlock()
-		return r, nil
-	}
-	if len(h.runs) >= h.cfg.MaxProcs {
-		h.mu.Unlock()
-		return nil, ErrTooMany
+		if victim == nil {
+			return nil, ErrTooMany
+		}
+		slog.Info("evicting idle pi", "session", victim.ID, "for", id)
+		h.Release(ctx, victim.ID)
+		h.mu.Lock()
 	}
 	if err := lock.Acquire(h.cfg.AgentDir, id); err != nil {
 		h.mu.Unlock()
@@ -193,7 +233,7 @@ func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Ru
 		stream = newStream()
 		h.streams[id] = stream
 	}
-	r := &Run{ID: id, Cwd: cwd, lastActive: time.Now()}
+	r := &Run{ID: id, Cwd: cwd, lastActive: time.Now(), gone: make(chan struct{})}
 	args := append([]string{"--mode", "rpc"}, sessArgs...)
 	args = append(args, h.cfg.PiArgs...)
 	env := append(ChildEnv(os.Environ()), "PIMU_LOCK_OWNER="+id)
@@ -260,6 +300,7 @@ func (h *Hub) watch(r *Run, s *Stream) {
 	}
 	h.mu.Unlock()
 	lock.Release(h.cfg.AgentDir, r.ID)
+	close(r.gone)
 	code := r.proc.ExitCode()
 	slog.Info("pi exited", "session", r.ID, "code", code)
 	ev := map[string]any{"type": "proc_state", "state": "exited", "code": code}
@@ -311,7 +352,7 @@ func (h *Hub) Call(ctx context.Context, r *Run, cmd map[string]any, timeout time
 	r.mu.Unlock()
 	if kill {
 		slog.Warn("pi unresponsive, killing", "session", r.ID)
-		go r.proc.Close()
+		go r.stop()
 	}
 	return resp, err
 }
@@ -330,7 +371,25 @@ func (h *Hub) Release(ctx context.Context, id string) {
 	if r.Streaming() {
 		_, _ = h.Call(ctx, r, map[string]any{"type": "abort"}, 60*time.Second)
 	}
-	r.proc.Close()
+	r.stop()
+	// Wait for watch to unregister the run: otherwise a request right after
+	// Release (e.g. a prompt after a bot edit) still finds the dead process.
+	<-r.gone
+}
+
+// idlest is the non-streaming run idle the longest, or nil. Caller holds h.mu.
+func (h *Hub) idlest() *Run {
+	var v *Run
+	var at time.Time
+	for _, r := range h.runs {
+		r.mu.Lock()
+		idle, last := !r.streaming && !r.closing, r.lastActive
+		r.mu.Unlock()
+		if idle && (v == nil || last.Before(at)) {
+			v, at = r, last
+		}
+	}
+	return v
 }
 
 // Reap closes idle processes until ctx is done.
@@ -355,7 +414,7 @@ func (h *Hub) Reap(ctx context.Context) {
 		h.mu.Unlock()
 		for _, r := range idle {
 			slog.Info("reaping idle pi", "session", r.ID)
-			go r.proc.Close()
+			go r.stop()
 		}
 	}
 }
