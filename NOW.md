@@ -18,3 +18,5 @@ V1–V6 built, 2026-10-30.
 - Known gaps: guard in rpc mode only flags shutdown; screenshots with a `filename` arg
   return no image; unread marks are per device (localStorage); no tests by choice.
 - Measured: pimu RSS ≈ 11 MB; each pi ≈ 117–123 MB → `PIMU_MAX_PROCS=3` fits 2C3G.
+- V7 (design only): docs/SLASH.md (built-in slash commands are TUI-only; intercept in composer),
+  docs/AUTONOMY.md (goals + heartbeat + approval gate). Not implemented yet.
