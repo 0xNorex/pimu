@@ -1,7 +1,7 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 AGENT_DIR ?= $(or $(PI_CODING_AGENT_DIR),$(HOME)/.pi/agent)
 
-.PHONY: build web check install-guard install
+.PHONY: build web check install-guard install-agent install
 
 build: web
 	go build -ldflags "-s -w -X main.version=$(VERSION)" -o bin/pimu ./cmd/pimu
@@ -15,6 +15,10 @@ check:
 install-guard:
 	mkdir -p $(AGENT_DIR)/extensions
 	cp extensions/pimu-guard.ts $(AGENT_DIR)/extensions/
+
+install-agent:
+	mkdir -p $(AGENT_DIR)/extensions
+	cp extensions/pimu-agent.ts $(AGENT_DIR)/extensions/
 
 install: build
 	install -m755 bin/pimu $(HOME)/.local/bin/pimu
