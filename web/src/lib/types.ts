@@ -1,0 +1,86 @@
+// Minimal hand-written subset of pi's RPC types (docs: json.md, message-types.md).
+export type TextBlock = { type: 'text'; text: string }
+export type ImageBlock = { type: 'image'; data: string; mimeType: string }
+export type ThinkingBlock = { type: 'thinking'; thinking: string; redacted?: boolean }
+export type ToolCallBlock = { type: 'toolCall'; id: string; name: string; arguments: Record<string, unknown> }
+export type AssistantBlock = TextBlock | ThinkingBlock | ToolCallBlock
+
+export type UserMessage = { role: 'user'; content: string | (TextBlock | ImageBlock)[]; timestamp: number }
+export type AssistantMessage = {
+  role: 'assistant'
+  content: AssistantBlock[]
+  model?: string
+  stopReason?: string
+  errorMessage?: string
+  timestamp: number
+}
+export type ToolResultMessage = {
+  role: 'toolResult'
+  toolCallId: string
+  toolName: string
+  content: (TextBlock | ImageBlock)[]
+  isError: boolean
+  timestamp: number
+}
+export type Message = UserMessage | AssistantMessage | ToolResultMessage
+
+export type ToolResult = { content?: (TextBlock | ImageBlock)[] }
+
+type AssistantEvent =
+  | { type: 'text_start' | 'thinking_start'; contentIndex: number }
+  | { type: 'text_delta' | 'thinking_delta' | 'toolcall_delta'; contentIndex: number; delta: string }
+  | { type: 'text_end' | 'thinking_end'; contentIndex: number; content: string }
+  | { type: 'toolcall_start'; contentIndex: number; id: string; toolName: string }
+  | { type: 'toolcall_end'; contentIndex: number; toolCall: ToolCallBlock }
+
+export type UIRequest = {
+  type: 'extension_ui_request'
+  id: string
+  method: string
+  title?: string
+  message?: string
+  options?: string[]
+  placeholder?: string
+  prefill?: string
+  timeout?: number
+  notifyType?: 'info' | 'warning' | 'error'
+}
+
+export type PiEvent =
+  | { type: 'agent_start' }
+  | { type: 'agent_settled'; aborted: boolean }
+  | { type: 'message_start' | 'message_end'; message: Message | { role: 'system' | 'custom' } }
+  | { type: 'message_update'; assistantMessageEvent: AssistantEvent }
+  | { type: 'tool_execution_start'; toolCallId: string; toolName: string; args: Record<string, unknown> }
+  | { type: 'tool_execution_update'; toolCallId: string; partialResult: ToolResult }
+  | { type: 'tool_execution_end'; toolCallId: string; result: ToolResult; isError: boolean; durationMs?: number }
+  | { type: 'queue_update'; steering: string[]; followUp: string[] }
+  | UIRequest
+
+export type PimuEvent =
+  | { type: 'proc_state'; state: 'starting' | 'ready' | 'exited'; code?: number; stderrTail?: string }
+  | { type: 'lock'; holder: 'pimu' | 'external' | 'none' }
+  | { type: 'resync' }
+
+export type Incoming = { kind: 'pi'; data: PiEvent } | { kind: 'pimu'; data: PimuEvent }
+
+export type Model = { id: string; name: string; provider: string; reasoning?: boolean }
+
+export type SessionSummary = {
+  id: string
+  path?: string
+  cwd: string
+  name?: string
+  preview?: string
+  updatedAt: string
+  status: 'idle' | 'running' | 'streaming' | 'external'
+}
+
+export type SessionState = {
+  model?: Model
+  thinkingLevel?: string
+  isStreaming?: boolean
+  sessionName?: string
+}
+
+export type SessionDetail = { id: string; cwd?: string; name?: string; status: SessionSummary['status']; state?: SessionState }
