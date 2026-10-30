@@ -12,7 +12,12 @@
 //   by sha256(goal|tool|canonical args); once approved, the identical call is
 //   allowed exactly once, then marked used (a repeat is blocked: "已执行过").
 //   Any gate error blocks the call (fail closed).
+//   In a background job (PIMU_JOB) the gate instead waits for the decision, so
+//   the job pauses as waiting_approval and continues once the user answers.
+// - a bot's main session (PIMU_BOT_ID, no gate): the pimu_task tool, which hands
+//   work to a background job; its result comes back into this session later.
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent"
+import { Type } from "typebox"
 import { createHash } from "node:crypto"
 import * as fs from "node:fs"
 import * as os from "node:os"
@@ -21,6 +26,8 @@ import * as path from "node:path"
 const BOT = process.env.PIMU_BOT_DIR
 const LEVEL = Number(process.env.PIMU_LEVEL || 0)
 const GOAL = process.env.PIMU_GOAL || ""
+const JOB = process.env.PIMU_JOB || ""
+const BOT_ID = process.env.PIMU_BOT_ID || ""
 const API = process.env.PIMU_API || ""
 const TOKEN = process.env.PIMU_INTERNAL_TOKEN || ""
 
@@ -82,6 +89,31 @@ export default function (pi: ExtensionAPI) {
     if (mem) event.systemPromptOptions.sections.bot_memory = `这是你（这个 Bot）的长期记忆，由用户维护：\n${mem}`
   })
 
+  if (BOT_ID && API && LEVEL === 0) {
+    pi.registerTool({
+      name: "pimu_task",
+      label: "后台任务",
+      description:
+        "把一件耗时的事交给后台的独立 pi 会话去做（同样的模型、MCP 和扩展），立刻返回，不阻塞对话。" +
+        "完成后结果会作为一条消息自动送回这个会话。适合：调研、跑长命令、批量改文件、写报告等需要几分钟以上的事。" +
+        "prompt 要写完整（后台会话看不到当前对话），包括目标、相关路径和期望的输出形式。",
+      promptSnippet: "pimu_task: delegate long work to a background session; result returns here later",
+      promptGuidelines: ["派出 pimu_task 后，简短告诉用户已在后台进行，然后继续回应用户，不要等待或轮询结果。"],
+      parameters: Type.Object({
+        title: Type.String({ description: "简短标题（≤20 字）" }),
+        prompt: Type.String({ description: "给后台会话的完整指示" }),
+      }),
+      async execute(_id, params) {
+        const r = (await post("/api/internal/jobs", { bot: BOT_ID, title: params.title, prompt: params.prompt })) as { id?: number; ahead?: number }
+        const where = r.ahead ? `排在第 ${r.ahead + 1} 位` : "已开始"
+        return {
+          content: [{ type: "text", text: `已派出后台任务 #${r.id}（${where}）。完成后结果会自动送回这个对话；现在继续回应用户，不要等它。` }],
+          details: { id: r.id },
+        }
+      },
+    })
+  }
+
   if (LEVEL !== 1 && LEVEL !== 2) return
   const approved = new Map<string, number>() // toolCallId -> inbox id
 
@@ -116,9 +148,17 @@ export default function (pi: ExtensionAPI) {
     const v = classify(event.toolName, input, ctx.cwd)
     if (v === "allow") return
     if (typeof v === "object") return { block: true, reason: `[pimu L${LEVEL}] ${v.block}` }
-    const hash = createHash("sha256").update(`${GOAL}|${event.toolName}|${JSON.stringify(canonical(input))}`).digest("hex")
+    const owner = JOB ? `job:${JOB}` : GOAL
+    const hash = createHash("sha256").update(`${owner}|${event.toolName}|${JSON.stringify(canonical(input))}`).digest("hex")
     const reason = event.toolName === "bash" ? String(input.command ?? "").slice(0, 120) : ""
-    const r = await post("/api/internal/approvals", { goal: Number(GOAL), tool: event.toolName, argsHash: hash, args: input, reason })
+    const who = JOB ? { job: Number(JOB) } : { goal: Number(GOAL) }
+    let r = await post("/api/internal/approvals", { ...who, tool: event.toolName, argsHash: hash, args: input, reason })
+    // A job waits (paused as waiting_approval) instead of deferring to the next heartbeat.
+    while (JOB && (r.status === "new" || r.status === "read")) {
+      if (ctx.signal?.aborted) return { block: true, reason: "[pimu] 已取消" }
+      await new Promise((ok) => setTimeout(ok, 2000))
+      r = await post(`/api/internal/approvals/${r.id}/status`, {})
+    }
     switch (r.status) {
       case "approved":
         approved.set(event.toolCallId, r.id!)

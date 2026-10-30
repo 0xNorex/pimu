@@ -18,6 +18,7 @@ import (
 	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/httpapi"
 	"github.com/0xNorex/pimu/internal/hub"
+	"github.com/0xNorex/pimu/internal/jobs"
 	"github.com/0xNorex/pimu/internal/notify"
 	"github.com/0xNorex/pimu/internal/store"
 	"github.com/0xNorex/pimu/internal/tasks"
@@ -93,7 +94,15 @@ func serve() error {
 	tg := notify.Telegram{Token: cfg.TGToken, ChatID: cfg.TGChatID}
 	tk := tasks.New(st, h, tg, cfg.PublicURL)
 	gs := goals.New(st, h, tk, tg, cfg.DataDir, cfg.PublicURL, cfg.Addr)
+	js := jobs.New(st, h, cfg.MaxJobs)
+	js.Alert = gs.Alert
+	js.BotEnv = func(bot string) []string {
+		return []string{"PIMU_BOT_DIR=" + gs.BotDir(bot), "PIMU_API=http://" + cfg.Addr, "PIMU_INTERNAL_TOKEN=" + gs.Token}
+	}
 	h.Lookup = func(id string) (string, []string, []string, bool) {
+		if args, env, ok := js.Extras(id); ok { // background job: fresh session in the bot's cwd
+			return "", args, env, false
+		}
 		args, env := gs.Extras(id) // PIMU_* for bots, heartbeats and goal subtasks
 		b, err := st.Bot(id)
 		if err != nil {
@@ -109,7 +118,7 @@ func serve() error {
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           httpapi.New(cfg, h, st, tk, gs, version, piVersion).Handler(web.FS()),
+		Handler:           httpapi.New(cfg, h, st, tk, gs, js, version, piVersion).Handler(web.FS()),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -119,6 +128,7 @@ func serve() error {
 		return fmt.Errorf("tasks: %w", err)
 	}
 	gs.Start(ctx)
+	js.Start(ctx)
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()

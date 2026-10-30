@@ -61,7 +61,7 @@ CREATE TABLE bots (
   archived     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-`, goalsSchema}
+`, goalsSchema, jobsSchema}
 
 type Store struct{ db *sql.DB }
 

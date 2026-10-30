@@ -135,7 +135,8 @@ func (s *Service) Extras(id string) (args, env []string) {
 		tid, _ := strconv.ParseInt(m[1], 10, 64)
 		goalID = s.st.TaskGoal(tid)
 	} else if _, err := s.st.Bot(id); err == nil {
-		return nil, []string{"PIMU_BOT_DIR=" + s.BotDir(id)}
+		// pimu_task (delegation) needs to reach Pimu from the bot session.
+		return nil, []string{"PIMU_BOT_DIR=" + s.BotDir(id), "PIMU_BOT_ID=" + id, "PIMU_API=" + s.apiURL, "PIMU_INTERNAL_TOKEN=" + s.Token}
 	}
 	if goalID == 0 {
 		return nil, nil

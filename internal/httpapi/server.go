@@ -17,6 +17,7 @@ import (
 	"github.com/0xNorex/pimu/internal/config"
 	"github.com/0xNorex/pimu/internal/goals"
 	"github.com/0xNorex/pimu/internal/hub"
+	"github.com/0xNorex/pimu/internal/jobs"
 	"github.com/0xNorex/pimu/internal/pirpc"
 	"github.com/0xNorex/pimu/internal/sessions"
 	"github.com/0xNorex/pimu/internal/store"
@@ -29,13 +30,14 @@ type Server struct {
 	st        *store.Store
 	tasks     *tasks.Service
 	goals     *goals.Service
+	jobs      *jobs.Service
 	version   string
 	piVersion string
 	limiter   *limiter
 }
 
-func New(cfg *config.Config, h *hub.Hub, st *store.Store, tk *tasks.Service, gs *goals.Service, version, piVersion string) *Server {
-	return &Server{cfg: cfg, hub: h, st: st, tasks: tk, goals: gs, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
+func New(cfg *config.Config, h *hub.Hub, st *store.Store, tk *tasks.Service, gs *goals.Service, js *jobs.Service, version, piVersion string) *Server {
+	return &Server{cfg: cfg, hub: h, st: st, tasks: tk, goals: gs, jobs: js, version: version, piVersion: piVersion, limiter: &limiter{hits: map[string][]time.Time{}}}
 }
 
 func (s *Server) Handler(static fs.FS) http.Handler {
@@ -98,6 +100,11 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("POST /api/inbox/{id}", s.handleInboxDecide)
 	api.HandleFunc("POST /api/internal/approvals", s.handleApprovalRequest) // pimu-agent.ts, internal token
 	api.HandleFunc("POST /api/internal/approvals/{id}/used", s.handleApprovalUsed)
+	api.HandleFunc("POST /api/internal/approvals/{id}/status", s.handleApprovalStatus)
+	api.HandleFunc("POST /api/internal/jobs", s.handleJobDelegate)
+	api.HandleFunc("GET /api/bots/{id}/jobs", s.handleJobList)
+	api.HandleFunc("GET /api/jobs/{id}", s.handleJobGet)
+	api.HandleFunc("POST /api/jobs/{id}/{action}", s.handleJobAction) // cancel | steer | rerun
 	api.HandleFunc("POST /api/sessions/{id}/compact", s.passthroughT("compact", 10*time.Minute, "customInstructions"))
 	api.HandleFunc("GET /api/sessions/{id}/stats", s.passthrough("get_session_stats"))
 	api.HandleFunc("POST /api/sessions/{id}/export", s.passthroughT("export_html", 2*time.Minute))

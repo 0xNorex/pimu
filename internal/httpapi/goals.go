@@ -352,6 +352,8 @@ func (s *Server) handleInboxDecide(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		switch {
+		case it.JobID != 0:
+			s.jobs.SetWaiting(it.JobID, false)
 		case it.Kind == "approval":
 			event = fmt.Sprintf("用户批准了审批 #%d（%s）。现在可以再调用一次完全相同的工具和参数（一字不差），只允许一次：\n%s", id, it.Tool, it.Body)
 		case it.Tool == "task":
@@ -367,7 +369,11 @@ func (s *Server) handleInboxDecide(w http.ResponseWriter, r *http.Request) {
 			writeErr(w, 409, "decided", "已经处理过了")
 			return
 		}
-		event = fmt.Sprintf("用户拒绝了 #%d（%s「%s」）。不要再为同一件事请求。", id, it.Kind, it.Title)
+		if it.JobID != 0 {
+			s.jobs.SetWaiting(it.JobID, false)
+		} else {
+			event = fmt.Sprintf("用户拒绝了 #%d（%s「%s」）。不要再为同一件事请求。", id, it.Kind, it.Title)
+		}
 	default:
 		writeErr(w, 400, "invalid", "action 只能是 read / approve / deny / answer")
 		return
@@ -403,6 +409,7 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Goal     int64          `json:"goal"`
+		Job      int64          `json:"job"`
 		Tool     string         `json:"tool"`
 		ArgsHash string         `json:"argsHash"`
 		Args     map[string]any `json:"args"`
@@ -411,12 +418,21 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
-	if body.Goal == 0 || body.Tool == "" || len(body.ArgsHash) != 64 {
-		writeErr(w, 400, "invalid", "goal, tool, argsHash required")
+	if (body.Goal == 0) == (body.Job == 0) || body.Tool == "" || len(body.ArgsHash) != 64 {
+		writeErr(w, 400, "invalid", "goal or job, tool, argsHash required")
 		return
 	}
+	botID := ""
+	if body.Job != 0 {
+		j, err := s.st.Job(body.Job)
+		if err != nil {
+			writeErr(w, 404, "not_found", "job")
+			return
+		}
+		botID = j.BotID
+	}
 	shown, _ := json.MarshalIndent(mask(map[string]any(body.Args)), "", "  ") // never show credentials
-	it, isNew, err := s.st.AddItem(store.Item{GoalID: body.Goal, Kind: "approval", DedupKey: "ap:" + body.ArgsHash,
+	it, isNew, err := s.st.AddItem(store.Item{BotID: botID, GoalID: body.Goal, JobID: body.Job, Kind: "approval", DedupKey: "ap:" + body.ArgsHash,
 		Title: clipText(fmt.Sprintf("想调用 %s：%s", body.Tool, body.Reason), 200), Body: clipText(string(shown), 4000), Tool: body.Tool, ArgsHash: body.ArgsHash})
 	if err != nil {
 		writeErr(w, 500, "db_error", err.Error())
@@ -424,6 +440,23 @@ func (s *Server) handleApprovalRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if isNew {
 		s.goals.Alert(it)
+	}
+	if body.Job != 0 && (it.Status == "new" || it.Status == "read") {
+		s.jobs.SetWaiting(body.Job, true) // the gate now polls until the user decides
+	}
+	writeJSON(w, 200, map[string]any{"id": it.ID, "status": it.Status})
+}
+
+// handleApprovalStatus is polled by a job's gate while it waits for the user.
+func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {
+	if !s.internalOK(w, r) {
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	it, err := s.st.Item(id)
+	if err != nil {
+		writeErr(w, 404, "not_found", "item")
+		return
 	}
 	writeJSON(w, 200, map[string]any{"id": it.ID, "status": it.Status})
 }

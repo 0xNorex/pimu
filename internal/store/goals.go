@@ -210,7 +210,8 @@ func (s *Store) ConsumeEvents(beatID int64, ids []int64) error {
 
 type Item struct {
 	ID        int64   `json:"id"`
-	GoalID    int64   `json:"goalId"`
+	GoalID    int64   `json:"goalId"` // 0 = belongs to a job
+	JobID     int64   `json:"jobId"`  // 0 = belongs to a goal
 	Kind      string  `json:"kind"`
 	DedupKey  string  `json:"dedupKey"`
 	Title     string  `json:"title"`
@@ -226,12 +227,12 @@ type Item struct {
 	BotName   string `json:"botName"`
 }
 
-const itemCols = `i.id, i.goal_id, i.kind, i.dedup_key, i.title, i.body, i.tool, i.args_hash, i.status, i.created_at, i.decided_at, g.title, g.bot_id, b.name`
-const itemFrom = ` FROM inbox i JOIN goals g ON g.id = i.goal_id JOIN bots b ON b.session_id = g.bot_id`
+const itemCols = `i.id, COALESCE(i.goal_id, 0), COALESCE(i.job_id, 0), i.kind, i.dedup_key, i.title, i.body, i.tool, i.args_hash, i.status, i.created_at, i.decided_at, COALESCE(g.title, '后台任务：' || j.title, ''), i.bot_id, b.name`
+const itemFrom = ` FROM inbox i JOIN bots b ON b.session_id = i.bot_id LEFT JOIN goals g ON g.id = i.goal_id LEFT JOIN jobs j ON j.id = i.job_id`
 
 func scanItem(r scanner) (Item, error) {
 	var it Item
-	err := r.Scan(&it.ID, &it.GoalID, &it.Kind, &it.DedupKey, &it.Title, &it.Body, &it.Tool, &it.ArgsHash, &it.Status, &it.CreatedAt, &it.DecidedAt, &it.GoalTitle, &it.BotID, &it.BotName)
+	err := r.Scan(&it.ID, &it.GoalID, &it.JobID, &it.Kind, &it.DedupKey, &it.Title, &it.Body, &it.Tool, &it.ArgsHash, &it.Status, &it.CreatedAt, &it.DecidedAt, &it.GoalTitle, &it.BotID, &it.BotName)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -241,13 +242,18 @@ func scanItem(r scanner) (Item, error) {
 // AddItem inserts an inbox row unless (goal, dedup key) exists; it returns the
 // row either way and whether it is new.
 func (s *Store) AddItem(it Item) (Item, bool, error) {
-	res, err := s.db.Exec(`INSERT OR IGNORE INTO inbox (goal_id, kind, dedup_key, title, body, tool, args_hash) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		it.GoalID, it.Kind, it.DedupKey, it.Title, it.Body, it.Tool, it.ArgsHash)
+	if it.BotID == "" {
+		if err := s.db.QueryRow(`SELECT bot_id FROM goals WHERE id = ?`, it.GoalID).Scan(&it.BotID); err != nil {
+			return Item{}, false, err
+		}
+	}
+	res, err := s.db.Exec(`INSERT OR IGNORE INTO inbox (bot_id, goal_id, job_id, kind, dedup_key, title, body, tool, args_hash) VALUES (?, NULLIF(?, 0), NULLIF(?, 0), ?, ?, ?, ?, ?, ?)`,
+		it.BotID, it.GoalID, it.JobID, it.Kind, it.DedupKey, it.Title, it.Body, it.Tool, it.ArgsHash)
 	if err != nil {
 		return Item{}, false, err
 	}
 	n, _ := res.RowsAffected()
-	out, err := scanItem(s.db.QueryRow(`SELECT `+itemCols+itemFrom+` WHERE i.goal_id = ? AND i.dedup_key = ?`, it.GoalID, it.DedupKey))
+	out, err := scanItem(s.db.QueryRow(`SELECT `+itemCols+itemFrom+` WHERE i.bot_id = ? AND COALESCE(i.goal_id, 0) = ? AND COALESCE(i.job_id, 0) = ? AND i.dedup_key = ?`, it.BotID, it.GoalID, it.JobID, it.DedupKey))
 	return out, n > 0, err
 }
 
@@ -257,7 +263,7 @@ func (s *Store) Item(id int64) (Item, error) {
 
 // Items lists inbox rows, newest first; open=true keeps only undecided ones.
 func (s *Store) Items(botID string, open bool, limit int) ([]Item, error) {
-	q := `SELECT ` + itemCols + itemFrom + ` WHERE (? = '' OR g.bot_id = ?)`
+	q := `SELECT ` + itemCols + itemFrom + ` WHERE (? = '' OR i.bot_id = ?)`
 	if open {
 		q += ` AND (i.status = 'new' OR (i.status = 'read' AND i.kind != 'notify'))`
 	}
