@@ -1,7 +1,7 @@
 import { memo, useState } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { AlertCircleIcon, BrainIcon, ChevronRightIcon, LayersIcon } from 'lucide-react'
+import { AlertCircleIcon, BrainIcon, ChevronRightIcon, FileIcon, LayersIcon } from 'lucide-react'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ToolCallRow, type ToolView } from './ToolCallRow'
 import type { Item } from '@/lib/timeline'
@@ -50,9 +50,22 @@ function ToolGroup({ tools }: { tools: ToolView[] }) {
   )
 }
 
+// The composer appends uploaded files as "附件（…）：\n- name: path" lines; show them as chips.
+const ATTACH = /\n*附件（已保存[^\n]*\n((?:- .+(?:\n|$))+)$/
+function splitAttachments(text: string) {
+  const m = text.match(ATTACH)
+  if (!m) return { body: text, files: [] }
+  const files = m[1].trim().split('\n').map((l) => {
+    const [name, ...rest] = l.slice(2).split(': ')
+    return { name, path: rest.join(': ') }
+  })
+  return { body: text.slice(0, m.index).replace(/^请看附件。$/, ''), files }
+}
+
 export function MessageItem({ item }: { item: Item }) {
   switch (item.kind) {
-    case 'user':
+    case 'user': {
+      const { body, files } = splitAttachments(item.text)
       return (
         <div className="flex justify-end">
           <div className="flex max-w-[85%] flex-col items-end gap-1.5">
@@ -63,10 +76,17 @@ export function MessageItem({ item }: { item: Item }) {
                 ))}
               </div>
             )}
-            {item.text && <div className="whitespace-pre-wrap break-words rounded-2xl bg-muted px-3.5 py-2">{item.text}</div>}
+            {body && <div className="whitespace-pre-wrap break-words rounded-2xl bg-muted px-3.5 py-2">{body}</div>}
+            {files.map((f) => (
+              <div key={f.path} title={f.path} className="flex max-w-full items-center gap-2 rounded-xl border px-3 py-2 text-sm">
+                <FileIcon className="size-4 shrink-0 text-muted-foreground" />
+                <span className="truncate">{f.name}</span>
+              </div>
+            ))}
           </div>
         </div>
       )
+    }
     case 'text':
       return (
         <div className={item.live ? 'streaming-cursor' : undefined}>

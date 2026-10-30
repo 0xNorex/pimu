@@ -15,6 +15,8 @@ import { BotAvatar } from './BotAvatar'
 import { BotDialog } from './BotDialog'
 
 const isTaskRun = (id: string) => id.startsWith('pimu-t')
+// Previews are raw markdown; drop the syntax characters.
+const plain = (t: string) => t.replace(/[*_`#>]+/g, '').replace(/^\s*[-+]\s+/, '').replace(/\s+/g, ' ').trim()
 
 export function BotList({ activeId, route }: { activeId?: string; route: Route['name'] }) {
   const [bots, setBots] = useState<Bot[] | null>(null)
@@ -66,7 +68,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           </div>
           <div className="flex items-center gap-2">
             <span className={`min-w-0 flex-1 truncate text-sm ${unread ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {b.status === 'streaming' ? '正在回复…' : b.last ? `${b.lastRole === 'user' ? '我：' : ''}${b.last}` : b.description || '还没有对话'}
+              {b.status === 'streaming' ? '正在回复…' : b.last ? `${b.lastRole === 'user' ? '我：' : ''}${plain(b.last)}` : b.description || '还没有对话'}
             </span>
             {b.status === 'streaming' ? (
               <Loader2Icon className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-label="运行中" />
