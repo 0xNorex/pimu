@@ -17,6 +17,8 @@ import { every } from '@/lib/format'
 import { MemoryEditor } from './MemoryEditor'
 import { THINKING, useModels } from './ModelPicker'
 import { PageHeader } from './PageHeader'
+import type { AuthStatus } from './LoginPage'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { SECTIONS, type Section } from '@/lib/sections'
 
 
@@ -93,20 +95,20 @@ export function SettingsPage({ section }: { section: Section }) {
 
   return (
     <main className="page-in flex min-w-0 flex-1 flex-col">
-      <PageHeader title="设置" back="#/" />
-      <nav className="flex gap-1 overflow-x-auto border-b px-3 py-2 [scrollbar-width:none]" aria-label="设置分区">
+      <PageHeader title="设置" back="#/" flush />
+      <nav className="flex h-9 gap-5 overflow-x-auto border-b px-3 [scrollbar-width:none] lg:px-4" aria-label="设置分区">
         {SECTIONS.map(([k, label]) => (
           <a
             key={k}
             href={`#/settings/${k}`}
             aria-current={k === section ? 'page' : undefined}
-            className="pressable shrink-0 rounded-full px-3.5 py-1.5 text-sm text-muted-foreground hover:bg-muted aria-[current=page]:bg-foreground aria-[current=page]:text-background"
+            className="relative flex shrink-0 items-center px-0.5 text-[13px] font-medium text-foreground/60 transition-colors after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none aria-[current=page]:text-foreground aria-[current=page]:after:opacity-100 dark:text-muted-foreground"
           >
             {label}
           </a>
         ))}
       </nav>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <ScrollArea className="flex-1">
         <div key={section} className="msg-in mx-auto flex max-w-2xl flex-col gap-6 p-4 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
           {section === 'memory' ? (
             <MemoryEditor />
@@ -126,7 +128,7 @@ export function SettingsPage({ section }: { section: Section }) {
             <PimuSection s={s} />
           )}
         </div>
-      </div>
+      </ScrollArea>
     </main>
   )
 }
@@ -374,6 +376,10 @@ function MCPSection({ s, patch }: P) {
 
 function PimuSection({ s }: { s: Settings }) {
   const [theme, setT] = useState<Theme>(getTheme)
+  const [auth, setAuth] = useState<AuthStatus | null>(null)
+  useEffect(() => {
+    api<AuthStatus>('/api/auth/status').then(setAuth, () => {})
+  }, [])
   const logout = async () => {
     await api('/api/logout', {}).catch(() => {})
     go('#/login')
@@ -411,12 +417,14 @@ function PimuSection({ s }: { s: Settings }) {
         <Row title="pi" right={<Mono>{s.piVersion}</Mono>} />
         <Row title="pi 配置目录" right={<Mono>{s.agentDir}</Mono>} />
         {s.publicUrl && <Row title="访问地址" right={<Mono>{s.publicUrl}</Mono>} />}
+        {auth?.via && <Row title="登录方式" right={<span className="text-sm text-muted-foreground">{auth.via === 'access' ? 'Cloudflare Access' : '访问令牌'}</span>} />}
       </Group>
-      <Group>
+      {/* An Access session is Cloudflare's to end; logging out of Pimu would change nothing. */}
+      {auth?.via === 'token' && <Group>
         <button type="button" onClick={() => void logout()} className="pressable flex min-h-12 w-full items-center justify-center gap-2 px-4 text-[15px] text-destructive hover:bg-destructive/5">
           <LogOutIcon className="size-4" /> 退出登录
         </button>
-      </Group>
+      </Group>}
     </>
   )
 }

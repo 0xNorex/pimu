@@ -1,41 +1,22 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { BellIcon, CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, SparklesIcon, TerminalIcon } from 'lucide-react'
-import { toast } from 'sonner'
+import { BellIcon, CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, SquarePenIcon, TerminalIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api, errMsg } from '@/lib/api'
-import { fmtShort } from '@/lib/format'
-import { go, type Route } from '@/lib/route'
+import { api } from '@/lib/api'
+import { fmtShort, shortPath } from '@/lib/format'
+import type { Route } from '@/lib/route'
 import { isUnread } from '@/lib/seen'
 import type { Bot, SessionSummary, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { BotAvatar } from './BotAvatar'
-
-function greeting() {
-  const h = new Date().getHours()
-  return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好'
-}
+import { openNewSession } from './NewSessionDialog'
 
 // Task runs (pimu-t…), heartbeats (pimu-g…) and background jobs (pimu-j…) live under their task/goal/bot, not here.
 const isBackground = (id: string) => /^pimu-[tgj]\d/.test(id)
-// "/home/me/proj/x" -> "~/proj/x"
-const shortPath = (p: string, home: string) => (home && (p === home || p.startsWith(home + '/')) ? '~' + p.slice(home.length) : p)
-
-// Creating always means a new session; any session can later be set as a bot.
-export async function newSession(cwd?: string) {
-  const t = toast.loading('正在开新会话…')
-  try {
-    const r = await api<{ id: string }>('/api/sessions', { cwd: cwd ?? '' })
-    toast.dismiss(t)
-    go(`#/s/${r.id}`)
-  } catch (e) {
-    toast.error(errMsg(e), { id: t })
-  }
-}
 // Previews are raw markdown; drop the syntax characters.
 const plain = (t: string) => t.replace(/[*_`#>]+/g, '').replace(/^\s*[-+]\s+/, '').replace(/\s+/g, ' ').trim()
 
@@ -96,6 +77,13 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessions, byId, ql])
   const PAGE = 8
+  // Folder name, with the parent only when two groups share it; the home dir reads as 主目录.
+  const dirLabel = (cwd: string) => {
+    if (cwd === dirs.home) return '主目录'
+    const base = cwd.split('/').filter(Boolean).pop() ?? cwd
+    const clash = groups.filter((g) => g.cwd.split('/').filter(Boolean).pop() === base).length > 1
+    return clash ? shortPath(cwd, dirs.home) : base
+  }
 
   const row = (b: Bot) => {
     const unread = b.id !== activeId && b.lastRole === 'assistant' && isUnread(b.id, b.updatedAt)
@@ -105,10 +93,10 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         href={`#/s/${b.id}`}
         style={{ viewTransitionName: `bot-${b.id}` }}
         aria-current={b.id === activeId ? 'page' : undefined}
-        className="pressable mx-2 flex items-center gap-3 rounded-xl px-2.5 py-2.5 hover:bg-foreground/[0.04] aria-[current=page]:bg-accent"
+        className="pressable mx-2 flex items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-foreground/[0.04] aria-[current=page]:bg-accent"
       >
         <span className="relative">
-          <BotAvatar id={b.id} className="size-12" />
+          <BotAvatar id={b.id} className="size-10" />
           {b.status === 'streaming' && <span className="absolute -right-0.5 -bottom-0.5 size-3.5 rounded-full border-2 border-background bg-emerald-500" aria-hidden />}
         </span>
         <div className="min-w-0 flex-1">
@@ -144,55 +132,25 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-1 px-4 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
-        <div className="flex-1 py-2">
-          <p className="text-xs text-muted-foreground">{greeting()}</p>
-          <h1 className="font-heading text-[26px] leading-tight font-semibold tracking-tight">Pimu</h1>
-        </div>
-        <Button asChild size="icon" variant={route === 'inbox' ? 'secondary' : 'ghost'} className="relative size-11 rounded-full">
+      <header className="flex h-14 shrink-0 items-center gap-0.5 pr-2 pl-4 pt-[env(safe-area-inset-top)] box-content">
+        <h1 className="flex-1 font-heading text-[17px] font-semibold tracking-tight">Pimu</h1>
+        <Button asChild size="icon" variant={route === 'inbox' ? 'secondary' : 'ghost'} className="relative size-10 lg:size-9">
           <a href="#/inbox" aria-label={unread ? `收件箱（${unread} 条未读）` : '收件箱'} title="收件箱">
             <BellIcon />
-            {unread > 0 && <span className="absolute top-1.5 right-1.5 min-w-4 rounded-full bg-primary px-1 text-[10px] leading-4 font-semibold text-primary-foreground">{unread > 99 ? '99+' : unread}</span>}
+            {unread > 0 && <span className="absolute top-1 right-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums">{unread > 99 ? '99+' : unread}</span>}
           </a>
         </Button>
-        <Button asChild size="icon" variant={route === 'tasks' || route === 'task' ? 'secondary' : 'ghost'} className="size-11 rounded-full">
-          <a href="#/tasks" aria-label="任务" title="任务">
-            <CalendarClockIcon />
-          </a>
+        <Button size="icon" variant="ghost" className="size-10 lg:size-9" aria-label="新会话" title="新会话" onClick={() => openNewSession()}>
+          <SquarePenIcon />
         </Button>
-        <Button asChild size="icon" variant={route === 'settings' ? 'secondary' : 'ghost'} className="size-11 rounded-full">
-          <a href="#/settings" aria-label="设置" title="设置">
-            <SettingsIcon />
-          </a>
-        </Button>
-        {dirs.workdirs.length > 1 ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="icon" className="size-11 rounded-full shadow-soft" aria-label="新会话" title="新会话">
-                <PlusIcon />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel className="text-xs text-muted-foreground">新会话，在哪个目录？</DropdownMenuLabel>
-              {dirs.workdirs.map((d) => (
-                <DropdownMenuItem key={d} className="min-h-11 font-mono text-xs" onSelect={() => void newSession(d)}>
-                  <FolderIcon /> {shortPath(d, dirs.home)}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button size="icon" className="size-11 rounded-full shadow-soft" aria-label="新会话" title="新会话" onClick={() => void newSession()}>
-            <PlusIcon />
-          </Button>
-        )}
       </header>
-      <div className="relative px-4 pt-1 pb-3">
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-7 size-4 -translate-y-[calc(50%-2px)] text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索" className="min-h-11 rounded-xl border-transparent bg-foreground/[0.05] pl-9 text-base shadow-none" aria-label="搜索" />
-        <kbd className="pointer-events-none absolute top-1/2 right-7 hidden -translate-y-[calc(50%-2px)] rounded border px-1.5 font-mono text-[10px] text-muted-foreground lg:block">⌘K</kbd>
+      <div className="relative px-3 pb-2">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-6 size-4 -translate-y-[calc(50%+4px)] text-muted-foreground" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索" className="h-10 rounded-lg border-transparent bg-foreground/[0.05] pl-9 text-base shadow-none lg:h-9 lg:text-sm" aria-label="搜索" />
+        <kbd className="pointer-events-none absolute top-1/2 right-6 hidden -translate-y-[calc(50%+4px)] rounded border px-1.5 font-mono text-[10px] text-muted-foreground lg:block">⌘K</kbd>
       </div>
-      <nav className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+      <ScrollArea className="flex-1">
+      <nav className="pb-3">
         {runs.length > 0 && (
           <section aria-label="正在进行" className="mx-4 mb-3 overflow-hidden rounded-xl border bg-card shadow-soft">
             <h2 className="px-3 pt-2 text-xs font-medium text-muted-foreground">正在进行</h2>
@@ -213,10 +171,10 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         )}
         {!bots && <div className="space-y-2 px-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
         {bots && active.length === 0 && groups.length === 0 && !ql && (
-          <div className="p-8 text-center text-sm text-muted-foreground">
-            <SparklesIcon className="mx-auto size-8 text-primary" />
-            <p className="mt-3">开个会话聊起来；常用的会话可以“设为 Bot”，置顶在这里。</p>
-            <Button className="mt-4 min-h-11" onClick={() => void newSession()}>
+          <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+            <p className="font-medium text-foreground">还没有会话</p>
+            <p className="mt-1">开个会话聊起来；常用的可以“设为 Bot”，置顶在这里。</p>
+            <Button className="mt-4 h-10" onClick={() => openNewSession()}>
               <PlusIcon /> 新会话
             </Button>
           </div>
@@ -230,11 +188,10 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         {groups.map((g) => {
           const shown = more[g.cwd] ? g.list : g.list.slice(0, PAGE)
           return (
-            <section key={g.cwd} aria-label={shortPath(g.cwd, dirs.home)} className="mt-3">
-              <h2 className="flex items-center gap-1.5 px-4 pb-1 text-xs text-muted-foreground" title={g.cwd}>
-                <FolderIcon className="size-3.5 shrink-0" />
-                <span className="min-w-0 flex-1 truncate font-mono">{shortPath(g.cwd, dirs.home)}</span>
-                <span className="tabular-nums">{g.list.length}</span>
+            <section key={g.cwd} aria-label={dirLabel(g.cwd)} className="mt-4">
+              <h2 className="flex items-center gap-1.5 px-4 pb-1 text-xs font-medium text-muted-foreground" title={g.cwd}>
+                <FolderIcon className="size-3.5 shrink-0 opacity-70" />
+                <span className="min-w-0 flex-1 truncate">{dirLabel(g.cwd)}</span>
               </h2>
               {shown.map((s) => (
                 <a
@@ -263,8 +220,21 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
             </section>
           )
         })}
-        <div className="mx-4 mt-3 border-t pt-1">{fold('已归档 Bot', archived.length, <div className="-mx-4">{archived.map(row)}</div>)}</div>
+        {archived.length > 0 && <div className="mx-4 mt-3">{fold('已归档 Bot', archived.length, <div className="-mx-4">{archived.map(row)}</div>)}</div>}
       </nav>
+      </ScrollArea>
+      <footer className="flex shrink-0 gap-1 border-t px-2 py-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)]">
+        {(
+          [
+            ['#/tasks', '任务', CalendarClockIcon, route === 'tasks' || route === 'task'],
+            ['#/settings', '设置', SettingsIcon, route === 'settings'],
+          ] as const
+        ).map(([href, label, Icon, on]) => (
+          <a key={href} href={href} aria-current={on ? 'page' : undefined} className="pressable flex h-10 flex-1 items-center justify-center gap-2 rounded-md text-sm text-muted-foreground hover:bg-foreground/[0.04] hover:text-foreground aria-[current=page]:bg-accent aria-[current=page]:text-foreground lg:h-9">
+            <Icon className="size-4" /> {label}
+          </a>
+        ))}
+      </footer>
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { go } from '@/lib/route'
 import type { Task } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { PageHeader } from './PageHeader'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { RunBadge, TRIGGER } from './RunBadge'
 
 export function TasksPage() {
@@ -41,19 +42,18 @@ export function TasksPage() {
   return (
     <main className="page-in flex min-w-0 flex-1 flex-col">
       <PageHeader title="任务" back="#/">
-        <Button size="icon" className="size-11" aria-label="新建任务" onClick={() => go('#/tasks/new')}>
-          <PlusIcon />
+        <Button size="sm" className="h-9" onClick={() => go('#/tasks/new')}>
+          <PlusIcon /> 新建
         </Button>
       </PageHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+      <ScrollArea className="flex-1">
+      <div className="p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:p-4">
         <div className="mx-auto flex max-w-3xl flex-col gap-3">
           {!tasks && [0, 1].map((i) => <Skeleton key={i} className="h-32" />)}
           {tasks?.length === 0 && (
-            <div className="p-6 text-center text-sm text-muted-foreground">
-              <p>还没有任务。任务会按计划在后台启动 pi 执行提示词。</p>
-              <Button className="mt-3" onClick={() => go('#/tasks/new')}>
-                新建任务
-              </Button>
+            <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+              <p className="font-medium text-foreground">还没有任务</p>
+              <p className="mt-1">任务会按计划在后台启动 pi 执行提示词。点右上角“新建”。</p>
             </div>
           )}
           {tasks?.map((t) => (
@@ -99,6 +99,7 @@ export function TasksPage() {
           ))}
         </div>
       </div>
+      </ScrollArea>
     </main>
   )
 }

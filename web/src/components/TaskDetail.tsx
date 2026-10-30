@@ -18,7 +18,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { lineTab, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
 import { cronLabel, CRON_PRESETS, fmtDate, fmtDuration } from '@/lib/format'
@@ -26,6 +26,7 @@ import { go } from '@/lib/route'
 import type { Bot, Model, Task, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { PageHeader } from './PageHeader'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { RunBadge, TRIGGER } from './RunBadge'
 
 type Form = Pick<Task, 'name' | 'prompt' | 'cwd' | 'sessionMode' | 'notify' | 'enabled'> & {
@@ -149,9 +150,9 @@ export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
 
   return (
     <main className="page-in flex min-w-0 flex-1 flex-col">
-      <PageHeader title={isNew ? '新建任务' : (task?.name ?? '任务')} back="#/tasks" backAlways>
+      <PageHeader title={isNew ? '新建任务' : (task?.name ?? '任务')} back="#/tasks" backAlways flush={!isNew}>
         {!isNew && (
-          <Button variant="outline" className="min-h-11" onClick={() => void runNow()}>
+          <Button variant="outline" size="sm" className="h-9" onClick={() => void runNow()}>
             <PlayIcon />
             立即运行
           </Button>
@@ -159,12 +160,23 @@ export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
       </PageHeader>
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
         {!isNew && (
-          <TabsList className="mx-3 mt-2 self-start">
-            <TabsTrigger value="runs">运行记录</TabsTrigger>
-            <TabsTrigger value="settings">设置</TabsTrigger>
-          </TabsList>
+          <div className="border-b px-3 lg:px-4">
+            <TabsList variant="line" className="h-9 gap-5 p-0">
+              {(
+                [
+                  ['runs', '运行记录'],
+                  ['settings', '设置'],
+                ] as const
+              ).map(([v, l]) => (
+                <TabsTrigger key={v} value={v} className={lineTab}>
+                  {l}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
         )}
-        <TabsContent value="runs" className="min-h-0 flex-1 overflow-y-auto">
+        <TabsContent value="runs" className="min-h-0 flex-1">
+          <ScrollArea className="h-full">
           {task && (
             <p className="px-4 pt-3 text-xs text-muted-foreground">
               {cronLabel(task.schedule)}
@@ -194,8 +206,10 @@ export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
               </li>
             ))}
           </ul>
+          </ScrollArea>
         </TabsContent>
-        <TabsContent value="settings" className="min-h-0 flex-1 overflow-y-auto">
+        <TabsContent value="settings" className="min-h-0 flex-1">
+          <ScrollArea className="h-full">
           {!form ? (
             <div className="space-y-3 p-4">{[0, 1, 2, 3].map((i) => <Skeleton key={i} className="h-11" />)}</div>
           ) : (
@@ -333,6 +347,7 @@ export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
               </div>
             </form>
           )}
+          </ScrollArea>
         </TabsContent>
       </Tabs>
     </main>

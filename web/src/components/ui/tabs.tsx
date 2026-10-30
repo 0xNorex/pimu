@@ -84,4 +84,7 @@ function TabsContent({
   )
 }
 
-export { Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }
+// Underline tab strip used under page headers (chat, task detail).
+const lineTab = "h-full flex-none px-0.5 text-[13px] group-data-horizontal/tabs:after:bottom-[-1px] focus-visible:border-transparent focus-visible:outline-none focus-visible:ring-2"
+
+export { lineTab, Tabs, TabsList, TabsTrigger, TabsContent, tabsListVariants }

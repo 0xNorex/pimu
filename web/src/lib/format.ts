@@ -56,3 +56,19 @@ export function fmtShort(t: string): string {
   return `${d.getMonth() + 1}/${d.getDate()}`
 }
 export const every = (sec: number) => (sec % 3600 === 0 ? `每 ${sec / 3600} 小时` : `每 ${Math.round(sec / 60)} 分钟`)
+
+// "/home/me/proj/x" -> "~/proj/x"
+export const shortPath = (p: string, home: string) => (home && (p === home || p.startsWith(home + '/')) ? '~' + p.slice(home.length) : p)
+
+// Provider-side display names often carry a price multiplier ("Foo (0.5x)"); it is noise here.
+export const cleanModel = (n?: string) => n?.replace(/\s*[(（]\s*[x×]?\s*[\d.]+\s*[x×]?\s*[)）]\s*$/i, '').trim() || undefined
+
+// Markdown to a one-paragraph preview: drop syntax, keep words.
+export const plainMd = (t: string) =>
+  t
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+    .replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm, '')
+    .replace(/[*_`~]+/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()

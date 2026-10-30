@@ -8,10 +8,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
-import { fmtDate } from '@/lib/format'
+import { fmtDate, plainMd } from '@/lib/format'
 import type { InboxItem } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { PageHeader } from './PageHeader'
+import { ScrollArea } from '@/components/ui/scroll-area'
 
 const KIND = { notify: '通知', ask: '提问', approval: '审批' } as const
 const STATUS: Record<string, string> = { approved: '已批准', denied: '已拒绝', used: '已执行', expired: '已过期' }
@@ -58,7 +59,9 @@ export function InboxPage({ bot }: { bot?: string }) {
   return (
     <main className="page-in flex min-w-0 flex-1 flex-col">
       <PageHeader title="收件箱" back="#/" />
-      <div className="min-h-0 flex-1 overflow-y-auto p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">{list}</div>
+      <ScrollArea className="flex-1">
+        <div className="p-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] lg:p-4">{list}</div>
+      </ScrollArea>
     </main>
   )
 }
@@ -97,7 +100,14 @@ function Row({ it, done, showBot }: { it: InboxItem; done: () => void; showBot: 
           {STATUS[it.status] && <Badge variant="outline">{STATUS[it.status]}</Badge>}
         </div>
         <p className="text-[15px] font-medium break-words">{it.title}</p>
-        {it.body && <p className={`line-clamp-6 text-sm break-words whitespace-pre-wrap text-muted-foreground ${it.kind === 'approval' ? 'rounded-md bg-muted p-2 font-mono text-xs' : ''}`}>{it.body}</p>}
+        {it.body &&
+          (it.kind === 'approval' ? (
+            <p className="line-clamp-6 rounded-md bg-muted p-2 font-mono text-xs break-words whitespace-pre-wrap text-muted-foreground">{it.body}</p>
+          ) : (
+            <p className="line-clamp-3 text-sm break-words text-muted-foreground" title={it.body.length > 200 ? it.body : undefined}>
+              {plainMd(it.body)}
+            </p>
+          ))}
         {answer && <Textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="回答它…" rows={2} />}
         {(decide || answer || it.status === 'new') && (
           <div className="flex flex-wrap justify-end gap-2">

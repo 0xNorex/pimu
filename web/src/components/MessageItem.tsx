@@ -105,8 +105,33 @@ export function MessageItem({ item }: { item: Item }) {
       return (
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">
           <AlertCircleIcon className="mt-0.5 size-4 shrink-0" />
-          <span className="break-words">{item.text}</span>
+          <ErrorText text={item.text} />
         </div>
       )
   }
+}
+
+// Provider errors are often "502 {json…}"; lead with the human part, keep the raw text one click away.
+function ErrorText({ text }: { text: string }) {
+  const m = /^(\d{3})\s+(\{[\s\S]*\})\s*$/.exec(text.trim())
+  let short = ''
+  if (m) {
+    try {
+      const j = JSON.parse(m[2])
+      const msg = j?.error?.message ?? j?.message ?? j?.detail ?? j?.title ?? j?.error
+      if (typeof msg === 'string') short = `${m[1]} · ${msg}`
+    } catch {
+      /* not JSON */
+    }
+  }
+  if (!short) return <span className="min-w-0 [overflow-wrap:anywhere]">{text}</span>
+  return (
+    <div className="min-w-0 space-y-1">
+      <p className="[overflow-wrap:anywhere]">{short}</p>
+      <details className="text-xs text-destructive/80">
+        <summary className="cursor-pointer select-none">原始信息</summary>
+        <pre className="mt-1 max-h-40 overflow-auto font-mono whitespace-pre-wrap [overflow-wrap:anywhere]">{text}</pre>
+      </details>
+    </div>
+  )
 }

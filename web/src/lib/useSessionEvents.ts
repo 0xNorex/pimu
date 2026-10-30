@@ -48,9 +48,10 @@ export function useSessionEvents(id: string, dispatch: Dispatch<Action>, onDetai
         }
         es.addEventListener('pi', (m) => {
           const data = JSON.parse(m.data) as PiEvent
-          if (data.type === 'extension_ui_request' && data.method === 'notify') {
-            const fn = data.notifyType === 'error' ? toast.error : data.notifyType === 'warning' ? toast.warning : toast
-            fn(data.message ?? '')
+          // Extensions chatter ("… loaded") at info level; only warnings and errors
+          // reach the user, once per distinct message.
+          if (data.type === 'extension_ui_request' && data.method === 'notify' && data.message && (data.notifyType === 'error' || data.notifyType === 'warning')) {
+            ;(data.notifyType === 'error' ? toast.error : toast.warning)(data.message, { id: `ext:${data.message}` })
           }
           push({ kind: 'pi', data })
         })

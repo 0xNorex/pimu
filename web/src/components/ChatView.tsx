@@ -7,9 +7,9 @@ import { Button } from '@/components/ui/button'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { lineTab, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, errMsg } from '@/lib/api'
-import { textOf } from '@/lib/format'
+import { cleanModel, textOf } from '@/lib/format'
 import { go } from '@/lib/route'
 import { initialStore, reducer } from '@/lib/store'
 import { buildItems, toolActivity } from '@/lib/timeline'
@@ -30,7 +30,8 @@ import { MessageItem } from './MessageItem'
 
 // Consecutive thinking / tool rows sit closer together than prose.
 const STEP = new Set<string | undefined>(['thinking', 'tool', 'group'])
-import { newSession } from './BotList'
+import { openNewSession } from './NewSessionDialog'
+import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModelPicker, modelKey } from './ModelPicker'
 
 function useElapsed(since: number | null) {
@@ -191,7 +192,7 @@ export function ChatView({ id }: { id: string }) {
           return `已命名为「${arg}」`
         })
       case 'new':
-        void newSession(detail?.cwd)
+        openNewSession(detail?.cwd)
         return true
       case 'resume':
         go('#/')
@@ -229,18 +230,18 @@ export function ChatView({ id }: { id: string }) {
   const lastUser = [...s.messages].reverse().find((m) => m.role === 'user')
 
   const title = bot?.name || detail?.state?.sessionName || detail?.name || '对话'
-  const model = detail?.state?.model?.provider !== 'unknown' ? detail?.state?.model?.name || modelName || detail?.state?.model?.id : undefined
+  const model = detail?.state?.model?.provider !== 'unknown' ? cleanModel(detail?.state?.model?.name || modelName || detail?.state?.model?.id) : undefined
 
   return (
     <div className="page-in flex h-full min-w-0 flex-1 flex-col">
-      <header className="z-10 flex items-center gap-1 border-b bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
+      <header className="z-10 box-content flex h-14 shrink-0 items-center gap-1 bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
+        <Button variant="ghost" size="icon" className="size-10 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
           <ChevronLeftIcon />
         </Button>
-        <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 py-2 pl-1 text-left" onClick={() => (bot ? setEditBot(true) : setInfo(true))} aria-label={bot ? '编辑 Bot' : '详情'}>
-          {bot && <BotAvatar id={bot.id} className="size-9" />}
+        <button type="button" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md py-1.5 pl-1 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none lg:pl-2" onClick={() => (bot ? setEditBot(true) : setInfo(true))} aria-label={bot ? '编辑 Bot' : '详情'}>
+          {bot && <BotAvatar id={bot.id} className="size-8" />}
           <span className="min-w-0">
-            <span className="block truncate text-[15px] font-medium">{title}</span>
+            <span className="block truncate text-sm font-medium">{title}</span>
             <span className="block truncate text-xs text-muted-foreground" aria-live="polite">
               {s.streaming ? <span className="shimmer">正在回复… {elapsed}s</span> : bot?.description || model || ''}
             </span>
@@ -248,7 +249,7 @@ export function ChatView({ id }: { id: string }) {
         </button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-11" aria-label="会话菜单">
+            <Button variant="ghost" size="icon" className="size-10 lg:size-9" aria-label="会话菜单">
               <EllipsisVerticalIcon />
             </Button>
           </DropdownMenuTrigger>
@@ -269,14 +270,23 @@ export function ChatView({ id }: { id: string }) {
       </header>
       <ConnectionBanner connected={connected} lock={s.lock} />
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col gap-0">
-        <TabsList className="mx-auto mt-2 w-fit">
-          <TabsTrigger value="chat">对话</TabsTrigger>
-          {bot && <TabsTrigger value="goals">目标</TabsTrigger>}
-          {bot && <TabsTrigger value="tasks">任务</TabsTrigger>}
-          <TabsTrigger value="activity">活动</TabsTrigger>
-        </TabsList>
+        <div className="border-b px-3 lg:px-4">
+          <TabsList variant="line" className="h-9 gap-5 p-0">
+            {(
+              [
+                ['chat', '对话'],
+                ...(bot ? [['goals', '目标'], ['tasks', '任务']] : []),
+                ['activity', '活动'],
+              ] as [string, string][]
+            ).map(([v, l]) => (
+              <TabsTrigger key={v} value={v} className={lineTab}>
+                {l}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
         <TabsContent value="chat" className="relative min-h-0 flex-1">
-          <div ref={scroller} onScroll={onScroll} className="absolute inset-0 overflow-y-auto overscroll-contain">
+          <ScrollArea viewportRef={scroller} onScroll={onScroll} className="h-full">
             <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4 text-[15px] leading-relaxed">
               {!s.loaded && [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
               {s.loaded && items.length === 0 && (
@@ -304,7 +314,7 @@ export function ChatView({ id }: { id: string }) {
                 </div>
               )}
             </div>
-          </div>
+          </ScrollArea>
           <Button
             size="sm"
             variant="secondary"
@@ -317,18 +327,24 @@ export function ChatView({ id }: { id: string }) {
           </Button>
         </TabsContent>
         {bot && (
-          <TabsContent value="goals" className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-            <BotGoals botId={id} />
+          <TabsContent value="goals" className="min-h-0 flex-1">
+            <ScrollArea className="h-full">
+              <BotGoals botId={id} />
+            </ScrollArea>
           </TabsContent>
         )}
         {bot && (
-          <TabsContent value="tasks" className="min-h-0 flex-1 overflow-y-auto">
-            <BotJobs botId={id} />
-            <BotTasks botId={id} />
+          <TabsContent value="tasks" className="min-h-0 flex-1">
+            <ScrollArea className="h-full">
+              <BotJobs botId={id} />
+              <BotTasks botId={id} />
+            </ScrollArea>
           </TabsContent>
         )}
-        <TabsContent value="activity" className="min-h-0 flex-1 overflow-y-auto">
-          <ActivityList items={activity} onJump={jump} />
+        <TabsContent value="activity" className="min-h-0 flex-1">
+          <ScrollArea className="h-full">
+            <ActivityList items={activity} onJump={jump} />
+          </ScrollArea>
         </TabsContent>
       </Tabs>
       {bot && <ChatApprovals botId={id} />}

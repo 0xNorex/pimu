@@ -226,3 +226,8 @@ html, body, #root { height: 100%; }
 /* iOS: main.tsx pins the app to the visual viewport so the composer rides above the keyboard. */
 #root { height: var(--app-h, 100dvh); }
 body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+
+/* Radix ScrollArea wraps content in display:table, which defeats `truncate`. */
+[data-slot="scroll-area-viewport"] > div { display: block !important; }
+/* Native scrollers that remain (code blocks, tables, menus, sheets): thin and quiet. */
+* { scrollbar-width: thin; scrollbar-color: color-mix(in oklch, var(--foreground) 18%, transparent) transparent; }

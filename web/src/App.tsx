@@ -1,8 +1,9 @@
 import { Toaster } from '@/components/ui/sonner'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useSyncExternalStore } from 'react'
 import { LoginPage } from '@/components/LoginPage'
 import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
+import { NewSessionDialog } from '@/components/NewSessionDialog'
 import { SECTIONS, type Section } from '@/lib/sections'
 
 // Pages load on demand so the home list (the phone's first screen) stays small.
@@ -13,7 +14,15 @@ const TasksPage = lazy(() => import('@/components/TasksPage').then((m) => ({ def
 const InboxPage = lazy(() => import('@/components/InboxPage').then((m) => ({ default: m.InboxPage })))
 import { useHashRoute } from '@/lib/route'
 
+const wideQ = typeof matchMedia !== 'undefined' ? matchMedia('(min-width: 1024px)') : undefined
+const useWide = () =>
+  useSyncExternalStore(
+    (cb) => (wideQ?.addEventListener('change', cb), () => wideQ?.removeEventListener('change', cb)),
+    () => !!wideQ?.matches,
+  )
+
 export default function App() {
+  const wide = useWide()
   const route = useHashRoute()
   const activeId = route.name === 'session' ? route.id : undefined
   const page =
@@ -38,12 +47,17 @@ export default function App() {
             <BotList activeId={activeId} route={route.name} />
           </aside>
           {page ? <Suspense fallback={<main className="flex-1" />}>{page}</Suspense> : (
-            <main className="hidden flex-1 items-center justify-center text-sm text-muted-foreground lg:flex">选一个会话，或点 + 开个新的</main>
+            <main className="hidden flex-1 flex-col items-center justify-center gap-1 text-sm text-muted-foreground lg:flex">
+              <p className="font-medium text-foreground">没有打开的会话</p>
+              <p>从左边选一个，或按 ⌘K 搜索</p>
+            </main>
           )}
         </>
       )}
       {route.name !== 'login' && <Switcher />}
-      <Toaster position="top-center" />
+      {route.name !== 'login' && <NewSessionDialog />}
+      {/* Desktop: out of the way, bottom-right. Phone: top, below the header, clear of the composer. */}
+      <Toaster position={wide ? 'bottom-right' : 'top-center'} visibleToasts={3} mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 60px)' }} />
     </div>
   )
 }
