@@ -74,7 +74,7 @@ func serve() error {
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level})))
 	if !cfg.Loopback() {
-		slog.Warn("PIMU_ADDR is not loopback: Pimu is reachable without Cloudflare Access", "addr", cfg.Addr)
+		slog.Warn("PIMU_ADDR is not loopback: Pimu is reachable without the tunnel", "addr", cfg.Addr)
 	}
 
 	piVersion := ""
@@ -156,7 +156,7 @@ func serve() error {
 
 	errc := make(chan error, 1)
 	go func() { errc <- srv.ListenAndServe() }()
-	slog.Info("pimu listening", "addr", cfg.Addr, "version", version, "pi", piVersion, "cf_access", cfg.CFAccessTeam != "")
+	slog.Info("pimu listening", "addr", cfg.Addr, "version", version, "pi", piVersion, "cf_access", cfg.CFAccessTeam != "", "token_login", cfg.Token != "")
 	select {
 	case err := <-errc:
 		return err
@@ -173,9 +173,12 @@ func serve() error {
 
 // release asks the running server to free a session.
 func release(id string) error {
-	cfg, err := config.Load(true)
+	cfg, err := config.Load(false)
 	if err != nil {
 		return err
+	}
+	if cfg.Token == "" {
+		return errors.New("pimu release needs PIMU_TOKEN in the environment")
 	}
 	req, err := http.NewRequest(http.MethodPost, "http://"+cfg.Addr+"/api/sessions/"+id+"/release", strings.NewReader("{}"))
 	if err != nil {

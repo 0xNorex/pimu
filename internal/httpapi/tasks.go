@@ -50,7 +50,7 @@ func (s *Server) validate(t *store.Task) string {
 	}
 	cwd, ok := s.cfg.AllowedDir(t.Cwd)
 	if !ok {
-		return "cwd 不在 PIMU_WORKDIRS 允许范围内或不存在"
+		return s.cwdErr(t.Cwd)
 	}
 	t.Cwd = cwd
 	for _, p := range []**string{&t.Schedule, &t.Model, &t.SessionID} {

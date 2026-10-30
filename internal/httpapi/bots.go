@@ -83,7 +83,7 @@ func (s *Server) validBot(b *store.Bot) string {
 	}
 	cwd, ok := s.cfg.AllowedDir(b.Cwd)
 	if !ok {
-		return "工作目录不在 PIMU_WORKDIRS 允许范围内或不存在"
+		return s.cwdErr(b.Cwd)
 	}
 	b.Cwd = cwd
 	return ""

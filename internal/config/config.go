@@ -40,9 +40,10 @@ func env(k, def string) string {
 	return def
 }
 
-// Load reads and validates the environment. requireToken is false for
-// subcommands that do not serve HTTP.
-func Load(requireToken bool) (*Config, error) {
+// Load reads and validates the environment. requireAuth (serve) needs at
+// least one login method: PIMU_TOKEN or Cloudflare Access. The token is
+// optional when Access is configured, but must be strong when set.
+func Load(requireAuth bool) (*Config, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, fmt.Errorf("home dir: %w", err)
@@ -68,8 +69,11 @@ func Load(requireToken bool) (*Config, error) {
 		}
 	}
 	c.SessionDir = expand(env("PI_CODING_AGENT_SESSION_DIR", filepath.Join(c.AgentDir, "sessions")), home)
-	if requireToken && len(c.Token) < 32 {
+	if c.Token != "" && len(c.Token) < 32 {
 		return nil, fmt.Errorf("PIMU_TOKEN must be at least 32 characters (try: openssl rand -hex 32)")
+	}
+	if requireAuth && c.Token == "" && c.CFAccessTeam == "" {
+		return nil, fmt.Errorf("no login method: set PIMU_TOKEN (openssl rand -hex 32) and/or PIMU_CF_ACCESS_TEAM + PIMU_CF_ACCESS_AUD")
 	}
 	for _, d := range strings.Split(env("PIMU_WORKDIRS", home), ",") {
 		d = strings.TrimSpace(d)
@@ -120,8 +124,16 @@ func (c *Config) Loopback() bool {
 	return ip != nil && ip.IsLoopback()
 }
 
-// AllowedDir resolves dir and checks it is inside one of Workdirs.
+// AllowedDir resolves dir and checks it is inside one of Workdirs. An empty
+// dir means the first workdir (never the process cwd, which is "/" under
+// systemd).
 func (c *Config) AllowedDir(dir string) (string, bool) {
+	if strings.TrimSpace(dir) == "" {
+		if len(c.Workdirs) == 0 {
+			return "", false
+		}
+		dir = c.Workdirs[0]
+	}
 	abs, err := filepath.Abs(filepath.Clean(dir))
 	if err != nil {
 		return "", false
@@ -134,7 +146,7 @@ func (c *Config) AllowedDir(dir string) (string, bool) {
 		return "", false
 	}
 	for _, w := range c.Workdirs {
-		if real == w || strings.HasPrefix(real, w+string(filepath.Separator)) {
+		if real == w || w == "/" || strings.HasPrefix(real, w+string(filepath.Separator)) {
 			return real, true
 		}
 	}

@@ -64,32 +64,28 @@ func TestCloudflareAccess(t *testing.T) {
 	m.Write([]byte(body))
 	goodSig := "sha256=" + hex.EncodeToString(m.Sum(nil))
 
+	tok := "Bearer " + strings.Repeat("t", 32)
 	cases := []struct {
-		name, method, path, remote string
-		hdr                        map[string]string
-		want                       int
+		name, method, path string
+		hdr                map[string]string
+		want               int
 	}{
-		{"no token", "GET", "/api/sessions", "", nil, 403},
-		{"static needs access too", "GET", "/", "", nil, 403},
-		{"wrong aud", "GET", "/api/sessions", "", map[string]string{cfaccess.Header: sign("aud-2")}, 403},
-		{"valid access, no pimu login", "GET", "/api/sessions", "", map[string]string{cfaccess.Header: sign("aud-1")}, 401},
-		{"valid access + pimu token", "GET", "/api/bots", "", map[string]string{cfaccess.Header: sign("aud-1"), "Authorization": "Bearer " + strings.Repeat("t", 32)}, 200},
-		{"cookie fallback", "GET", "/api/bots", "", map[string]string{"Cookie": cfaccess.Cookie + "=" + sign("aud-1"), "Authorization": "Bearer " + strings.Repeat("t", 32)}, 200},
-		{"local health", "GET", "/api/health", "127.0.0.1:5555", nil, 200},
-		{"tunnel health", "GET", "/api/health", "127.0.0.1:5555", map[string]string{"Cf-Connecting-Ip": "203.0.113.9"}, 403},
-		{"local internal reaches cap auth", "POST", "/api/internal/approvals", "127.0.0.1:5555", nil, 403},
-		{"local non-internal", "GET", "/api/sessions", "127.0.0.1:5555", nil, 403},
-		{"hook with ?k only", "POST", hookPath + "?k=" + g.HookSecret, "", nil, 403},
-		{"hook with bad signature", "POST", hookPath, "", map[string]string{"X-Pimu-Signature": "sha256=00"}, 403},
-		{"hook with good signature", "POST", hookPath, "", map[string]string{"X-Pimu-Signature": goodSig}, 200},
-		{"hook github header", "POST", hookPath, "", map[string]string{"X-Hub-Signature-256": goodSig, "X-GitHub-Delivery": "d2"}, 200},
+		{"nothing", "GET", "/api/sessions", nil, 401},
+		{"wrong aud", "GET", "/api/sessions", map[string]string{cfaccess.Header: sign("aud-2")}, 401},
+		{"access alone is enough", "GET", "/api/bots", map[string]string{cfaccess.Header: sign("aud-1")}, 200},
+		{"access cookie fallback", "GET", "/api/bots", map[string]string{"Cookie": cfaccess.Cookie + "=" + sign("aud-1")}, 200},
+		{"token alone is enough", "GET", "/api/bots", map[string]string{"Authorization": tok}, 200},
+		{"bad access, good token", "GET", "/api/bots", map[string]string{cfaccess.Header: sign("aud-2"), "Authorization": tok}, 200},
+		{"health is public", "GET", "/api/health", nil, 200},
+		{"hook with ?k", "POST", hookPath + "?k=" + g.HookSecret, map[string]string{"X-Pimu-Dedup": "d0"}, 200},
+		{"hook with bad ?k", "POST", hookPath + "?k=nope", nil, 403},
+		{"hook with bad signature", "POST", hookPath, map[string]string{"X-Pimu-Signature": "sha256=00"}, 403},
+		{"hook with good signature", "POST", hookPath, map[string]string{"X-Pimu-Signature": goodSig, "X-Pimu-Dedup": "d1"}, 200},
+		{"hook github header", "POST", hookPath, map[string]string{"X-Hub-Signature-256": goodSig, "X-GitHub-Delivery": "d2"}, 200},
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest(c.method, c.path, strings.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
-		if c.remote != "" {
-			req.RemoteAddr = c.remote
-		}
 		for k, v := range c.hdr {
 			req.Header.Set(k, v)
 		}
@@ -99,13 +95,48 @@ func TestCloudflareAccess(t *testing.T) {
 			t.Errorf("%s: %d, want %d (%s)", c.name, w.Code, c.want, strings.TrimSpace(w.Body.String()))
 		}
 	}
-	// The local internal call above got past Access: its 403 is the capability check.
-	req := httptest.NewRequest("POST", "/api/internal/approvals", strings.NewReader(`{}`))
-	req.RemoteAddr = "127.0.0.1:5555"
-	w := httptest.NewRecorder()
-	h.ServeHTTP(w, req)
-	if strings.Contains(w.Body.String(), "access_denied") {
-		t.Fatal("local internal call hit the Access check")
+	status := func(hdr map[string]string) map[string]any {
+		req := httptest.NewRequest("GET", "/api/auth/status", nil)
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		var out map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		return out
+	}
+	if st := status(map[string]string{cfaccess.Header: sign("aud-1")}); st["authed"] != true || st["via"] != "access" {
+		t.Errorf("status with access: %v", st)
+	}
+	if st := status(nil); st["authed"] != false || st["token"] != true || st["access"] != true {
+		t.Errorf("status anonymous: %v", st)
+	}
+}
+
+func TestAccessOnlyNoToken(t *testing.T) {
+	r, sign := accessRig(t)
+	r.s.cfg.Token = ""
+	h := r.s.Handler(os.DirFS(t.TempDir()))
+	do := func(method, path, body string, hdr map[string]string) int {
+		req := httptest.NewRequest(method, path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		for k, v := range hdr {
+			req.Header.Set(k, v)
+		}
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		return w.Code
+	}
+	if c := do("GET", "/api/bots", "", map[string]string{cfaccess.Header: sign("aud-1")}); c != 200 {
+		t.Errorf("access only: %d", c)
+	}
+	// An empty token must never match an empty Bearer or log in.
+	if c := do("GET", "/api/bots", "", map[string]string{"Authorization": "Bearer "}); c != 401 {
+		t.Errorf("empty bearer: %d", c)
+	}
+	if c := do("POST", "/api/login", `{"token":""}`, nil); c != 403 {
+		t.Errorf("login without PIMU_TOKEN: %d", c)
 	}
 }
 

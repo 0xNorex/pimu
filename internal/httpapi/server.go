@@ -57,10 +57,13 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/health", s.handleHealth)
 	api.HandleFunc("POST /api/login", s.handleLogin)
 	api.HandleFunc("POST /api/logout", s.handleLogout)
+	api.HandleFunc("GET /api/auth/status", s.handleAuthStatus)
 	api.HandleFunc("GET /api/workdirs", func(w http.ResponseWriter, r *http.Request) {
 		home, _ := os.UserHomeDir()
 		writeJSON(w, 200, map[string]any{"workdirs": s.cfg.Workdirs, "home": home})
 	})
+	api.HandleFunc("GET /api/dirs", s.handleDirs)
+	api.HandleFunc("POST /api/dirs", s.handleMkdir)
 	api.HandleFunc("GET /api/models", s.handleModels)
 	api.HandleFunc("GET /api/sessions", s.handleList)
 	api.HandleFunc("POST /api/sessions", s.handleCreate)
@@ -125,7 +128,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	mux := http.NewServeMux()
 	mux.Handle("/api/", s.guard(api))
 	mux.Handle("/", staticHandler(static))
-	return logRequests(s.requireAccess(mux))
+	return logRequests(mux)
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
@@ -176,7 +179,7 @@ func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	cwd, ok := s.cfg.AllowedDir(body.Cwd)
 	if !ok {
-		writeErr(w, 400, "bad_cwd", "cwd 不在 PIMU_WORKDIRS 允许范围内或不存在")
+		writeErr(w, 400, "bad_cwd", s.cwdErr(body.Cwd))
 		return
 	}
 	run, err := s.hub.Create(r.Context(), cwd)

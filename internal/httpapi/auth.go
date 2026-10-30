@@ -5,12 +5,15 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
+	"log/slog"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/0xNorex/pimu/internal/cfaccess"
 )
 
 const cookieName = "pimu"
@@ -22,7 +25,31 @@ func (s *Server) sign(exp int64) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
+// authed: a valid Cloudflare Access JWT or Pimu's own token (Bearer header or
+// signed cookie). Either one is enough; the token is off when PIMU_TOKEN is unset.
 func (s *Server) authed(r *http.Request) bool {
+	return s.accessOK(r) || s.tokenOK(r)
+}
+
+func (s *Server) accessOK(r *http.Request) bool {
+	if s.access == nil {
+		return false
+	}
+	t := cfaccess.Token(r)
+	if t == "" {
+		return false
+	}
+	if _, err := s.access.Verify(r.Context(), t); err != nil {
+		slog.Warn("cloudflare access token rejected", "path", r.URL.Path, "ip", clientIP(r), "err", err.Error())
+		return false
+	}
+	return true
+}
+
+func (s *Server) tokenOK(r *http.Request) bool {
+	if s.cfg.Token == "" {
+		return false
+	}
 	if b, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer "); ok {
 		return subtle.ConstantTimeCompare([]byte(b), []byte(s.cfg.Token)) == 1
 	}
@@ -57,6 +84,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if !readJSON(w, r, &body) {
 		return
 	}
+	if s.cfg.Token == "" {
+		writeErr(w, http.StatusForbidden, "token_disabled", "未设置 PIMU_TOKEN，请通过 Cloudflare Access 登录")
+		return
+	}
 	if subtle.ConstantTimeCompare([]byte(body.Token), []byte(s.cfg.Token)) != 1 {
 		writeErr(w, http.StatusUnauthorized, "bad_token", "token 不正确")
 		return
@@ -64,6 +95,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	exp := time.Now().Add(cookieTTL).Unix()
 	s.setCookie(w, strconv.FormatInt(exp, 10)+"."+s.sign(exp), int(cookieTTL.Seconds()))
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+// handleAuthStatus tells the login page whether this browser is already in
+// (e.g. through Cloudflare Access) and which methods exist.
+func (s *Server) handleAuthStatus(w http.ResponseWriter, r *http.Request) {
+	via := ""
+	if s.accessOK(r) {
+		via = "access"
+	} else if s.tokenOK(r) {
+		via = "token"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"authed": via != "", "via": via, "token": s.cfg.Token != "", "access": s.access != nil})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -96,7 +139,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 			}
 		}
 		switch r.URL.Path {
-		case "/api/health", "/api/login":
+		case "/api/health", "/api/login", "/api/auth/status":
 		default:
 			if !s.authed(r) {
 				writeErr(w, http.StatusUnauthorized, "unauthorized", "请先登录")

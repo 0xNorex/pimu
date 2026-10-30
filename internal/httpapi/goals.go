@@ -252,8 +252,7 @@ func (s *Server) handleGoalBeat(w http.ResponseWriter, r *http.Request) {
 
 // handleGoalHook: POST /api/goals/{id}/hook, body ≤64 KB, authenticated by
 // either ?k=<secret> or a signature header (X-Pimu-Signature or GitHub's
-// X-Hub-Signature-256) "sha256=" + hex(HMAC-SHA256(secret, body)). Behind
-// Cloudflare Access only signed hooks (or ones with a service token) get in.
+// X-Hub-Signature-256) "sha256=" + hex(HMAC-SHA256(secret, body)).
 // Dedup key: X-GitHub-Delivery, then X-Pimu-Dedup, then sha256(body).
 func (s *Server) handleGoalHook(w http.ResponseWriter, r *http.Request) {
 	g, ok := s.goalOrErr(w, r)
