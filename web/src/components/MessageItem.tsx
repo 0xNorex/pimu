@@ -70,6 +70,8 @@ export function MessageItem({ item }: { item: Item }) {
       return <ToolCallRow tool={item.tool} />
     case 'group':
       return <ToolGroup tools={item.tools} />
+    case 'aborted':
+      return <p className="text-xs text-muted-foreground">已停止</p>
     case 'error':
       return (
         <div className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive">

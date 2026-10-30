@@ -9,6 +9,7 @@ export type Item =
   | { kind: 'tool'; key: string; tool: ToolView; ts: number }
   | { kind: 'group'; key: string; tools: ToolView[] }
   | { kind: 'error'; key: string; text: string }
+  | { kind: 'aborted'; key: string }
 
 // Flattens messages (+ streaming draft) into render items.
 function flatten(messages: Message[], draft: AssistantMessage | null, tools: Record<string, ToolState>, streaming: boolean): Item[] {
@@ -48,6 +49,7 @@ function flatten(messages: Message[], draft: AssistantMessage | null, tools: Rec
       }
     })
     if (m.stopReason === 'error' && m.errorMessage) flat.push({ kind: 'error', key: `${k}-err`, text: m.errorMessage })
+    if (m.stopReason === 'aborted') flat.push({ kind: 'aborted', key: `${k}-abort` })
   })
   return flat
 }
