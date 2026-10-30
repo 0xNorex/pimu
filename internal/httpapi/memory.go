@@ -10,8 +10,9 @@ import (
 
 const memoryMax = 1 << 20
 
-// Memory is pi's global AGENTS.md; mtime (unix ns, 0 = file absent) is the
-// optimistic-concurrency token for PUT.
+// Memory is pi's global AGENTS.md; mtime (unix µs, 0 = file absent) is the
+// optimistic-concurrency token for PUT. Microseconds, not ns: the browser parses
+// JSON numbers as float64 and ns timestamps (>2^53) would never round-trip.
 func (s *Server) memoryPath() string { return filepath.Join(s.cfg.AgentDir, "AGENTS.md") }
 
 func mtimeOf(path string) (int64, error) {
@@ -22,7 +23,7 @@ func mtimeOf(path string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	return st.ModTime().UnixNano(), nil
+	return st.ModTime().UnixMicro(), nil
 }
 
 func (s *Server) handleMemoryGet(w http.ResponseWriter, r *http.Request) {
