@@ -23,7 +23,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
 import { cronLabel, CRON_PRESETS, fmtDate, fmtDuration } from '@/lib/format'
 import { go } from '@/lib/route'
-import type { Model, Task, TaskRun } from '@/lib/types'
+import type { Bot, Model, Task, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { PageHeader } from './PageHeader'
 import { RunBadge, TRIGGER } from './RunBadge'
@@ -57,10 +57,11 @@ function Field({ label, id, hint, children }: { label: string; id: string; hint?
   )
 }
 
-export function TaskDetail({ id }: { id: number | 'new' }) {
+export function TaskDetail({ id, bot }: { id: number | 'new'; bot?: string }) {
   const isNew = id === 'new'
   const [task, setTask] = useState<Task | null>(null)
-  const [form, setForm] = useState<Form | null>(isNew ? blank : null)
+  const [form, setForm] = useState<Form | null>(isNew ? (bot ? { ...blank, sessionMode: 'reuse', sessionId: bot } : blank) : null)
+  const [bots, setBots] = useState<Bot[]>([])
   const [runs, setRuns] = useState<TaskRun[] | null>(null)
   const [models, setModels] = useState<Model[]>([])
   const [workdirs, setWorkdirs] = useState<string[]>([])
@@ -73,6 +74,13 @@ export function TaskDetail({ id }: { id: number | 'new' }) {
 
   useEffect(() => {
     api<{ models: Model[] }>('/api/models').then((r) => setModels(r.models)).catch(() => {})
+    api<{ bots: Bot[] }>('/api/bots')
+      .then((r) => {
+        setBots(r.bots)
+        const b = r.bots.find((x) => x.id === bot)
+        if (isNew && b) setForm((f) => (f ? { ...f, cwd: b.cwd } : f))
+      })
+      .catch(() => {})
     api<{ workdirs: string[] }>('/api/workdirs')
       .then((r) => {
         setWorkdirs(r.workdirs)
@@ -204,14 +212,14 @@ export function TaskDetail({ id }: { id: number | 'new' }) {
               <Field label="提示词" id="prompt">
                 <Textarea id="prompt" value={form.prompt} onChange={(e) => set('prompt', e.target.value)} className="min-h-28 text-base" required />
               </Field>
-              <Field label="工作目录" id="cwd">
+              {form.sessionMode === 'new' && <Field label="工作目录" id="cwd">
                 <Input id="cwd" value={form.cwd} onChange={(e) => set('cwd', e.target.value)} className="min-h-11 font-mono text-base" list="task-workdirs" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
                 <datalist id="task-workdirs">
                   {workdirs.map((w) => (
                     <option key={w} value={w} />
                   ))}
                 </datalist>
-              </Field>
+              </Field>}
               <Field label="计划（cron，服务器本地时间）" id="schedule" hint={form.schedule.trim() ? `分 时 日 月 周 · ${cronLabel(form.schedule.trim())}` : '留空表示只在点“立即运行”时执行一次'}>
                 <Input id="schedule" value={form.schedule} onChange={(e) => set('schedule', e.target.value)} placeholder="例如 0 9 * * 1-5" className="min-h-11 font-mono text-base" autoCapitalize="off" autoCorrect="off" spellCheck={false} />
                 <div className="flex flex-wrap gap-1.5 pt-1">
@@ -239,14 +247,14 @@ export function TaskDetail({ id }: { id: number | 'new' }) {
                 </Select>
               </Field>
               <div className="grid gap-4 sm:grid-cols-2">
-                <Field label="会话" id="mode">
+                <Field label="在哪里运行" id="mode">
                   <Select value={form.sessionMode} onValueChange={(v) => set('sessionMode', v as Form['sessionMode'])}>
                     <SelectTrigger id="mode" className="min-h-11 w-full text-base">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="new">每次新建会话</SelectItem>
-                      <SelectItem value="reuse">复用指定会话</SelectItem>
+                      <SelectItem value="reuse">交给一个 Bot</SelectItem>
+                      <SelectItem value="new">每次新开临时会话</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
@@ -264,8 +272,26 @@ export function TaskDetail({ id }: { id: number | 'new' }) {
                 </Field>
               </div>
               {form.sessionMode === 'reuse' && (
-                <Field label="会话 ID" id="sid" hint="被占用（Pimu 或终端正在使用）时本次运行记为失败">
-                  <Input id="sid" value={form.sessionId} onChange={(e) => set('sessionId', e.target.value)} className="min-h-11 font-mono text-base" autoCapitalize="off" spellCheck={false} />
+                <Field label="Bot" id="sid" hint="结果会出现在这个 Bot 的对话里；它正在回复时本次运行记为失败">
+                  <Select
+                    value={form.sessionId}
+                    onValueChange={(v) => {
+                      const b = bots.find((x) => x.id === v)
+                      setForm((f) => (f ? { ...f, sessionId: v, cwd: b?.cwd ?? f.cwd } : f))
+                    }}
+                  >
+                    <SelectTrigger id="sid" className="min-h-11 w-full text-base">
+                      <SelectValue placeholder="选择 Bot" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {bots.filter((b) => !b.archived || b.id === form.sessionId).map((b) => (
+                        <SelectItem key={b.id} value={b.id}>
+                          {b.emoji} {b.name}
+                        </SelectItem>
+                      ))}
+                      {form.sessionId && !bots.some((b) => b.id === form.sessionId) && <SelectItem value={form.sessionId}>{form.sessionId}</SelectItem>}
+                    </SelectContent>
+                  </Select>
                 </Field>
               )}
               <div className="grid grid-cols-2 gap-4">
