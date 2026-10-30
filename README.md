@@ -44,7 +44,8 @@ Open the URL, paste the token. On iPhone: Safari → Share → Add to Home Scree
 | `PIMU_MAX_PROCS` | `3` | concurrent pi processes |
 | `PIMU_LOG_LEVEL` | `info` | `debug` also logs pi stderr |
 | `PIMU_DATA_DIR` | `~/.local/share/pimu` | holds `pimu.db` (tasks + runs only) |
-| `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → task run notifications via Bot API |
+| `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → task run, goal and job notifications via Bot API |
+| `PIMU_MAX_JOBS` | `1` | background jobs running at once; the rest queue |
 
 ## Sessions and bots
 
@@ -58,8 +59,8 @@ persona, goals); the pi session file and the conversation stay.
 Home list: bots pinned on top (busy, then unread, then newest), then every
 other session expanded and grouped by working directory (`~/proj/x` headers),
 including sessions you started with `pi` in a terminal (marked with a terminal
-icon). Task runs (`pimu-t*`) and heartbeats (`pimu-g*`) are hidden there and
-shown under their task or goal. Session ids stay in 详情, not in the list.
+icon). Task runs (`pimu-t*`), heartbeats (`pimu-g*`) and background jobs
+(`pimu-j*`) are hidden there and shown under their task, goal or bot. Session ids stay in 详情, not in the list.
 
 The conversation, model, thinking level and system prompt live in pi's session
 file. Pimu's SQLite `bots` table keeps only what pi cannot: name, one-line
@@ -87,6 +88,12 @@ description, persona text, cwd, archived.
   `<cwd>/.pimu/uploads/<session>/` and their path is added to the message, so pi
   reads them with its own tools. Paste and drag-drop work too. 🎤 uses the
   browser Web Speech API (zh-CN); the button is hidden where unsupported.
+- Slash: pi's built-in commands are TUI-only (docs/SLASH.md), so the composer
+  handles `/compact [指示]`, `/model [p/m]`, `/thinking [lvl]`, `/name x`,
+  `/session`, `/export`, `/copy`, `/new`, `/resume`, `/settings`, `/reload`
+  itself (`/fork` and `/clone` point to the terminal). Everything else
+  (extension commands, `/skill:*`, prompt templates) goes to pi unchanged. The
+  autocomplete labels each command's source.
 
 ## Tasks
 
@@ -98,6 +105,40 @@ status, the last assistant text as summary, and links to its session.
 A failed run is retried after 1 minute up to `maxRetries` extra times; runs cut
 off by a Pimu restart are marked `interrupted: pimu restarted` and retried the
 same way. Missed cron slots while Pimu was down are not backfilled.
+
+## Autonomy: goals, inbox, background jobs
+
+Design and limits: docs/AUTONOMY.md. Needs the agent extension once:
+`make install-agent` (copies `extensions/pimu-agent.ts` to
+`~/.pi/agent/extensions/`; it does nothing in sessions without Pimu's env).
+
+- **Goals** (bot → 目标) attach only to bots. Each has a `GOAL.md`, an interval
+  and active hours. A zero-token precheck (enabled, active hours, due time or a
+  pending event such as a webhook or an answer, limits) decides whether a beat
+  is needed; each beat is a fresh pi session
+  (`pimu-g<goal>-b<beat>`) that reads GOAL/STATE/findings and ends with a
+  ```` ```pimu ```` action block: `noop`, `notify`, `ask`, `task`, `state`,
+  `finding`. Notify is for important things only and is deduplicated.
+  Webhook: `POST /api/goals/{id}/hook?k=…` (key shown masked in the UI).
+- **Gate** (pimu-agent.ts): L1 = read-only tools plus writes inside the bot
+  directory; L2 = anything else needs approval in the inbox. Approval is for
+  one exact call (hash of tool + args), used once. Secret paths are always
+  blocked.
+- **Hard limits**: at most 6 beats/hour, a token budget per goal per day, wall
+  time per beat; three failed beats in a row disable the goal (and notify).
+  The checkpoint between beats is `STATE.md` (≤4 KB, rewritten by the `state`
+  action); every beat is also appended to the bot's `log/<date>.md`.
+- **Inbox** (🔔 on home, or inside the bot's 目标 tab): notify / ask /
+  approval items with 已读, 批准一次, 拒绝, 回答.
+- **Background jobs** (bot → 任务): in a bot's chat say "放到后台做". The bot
+  calls the `pimu_task` tool; Pimu starts an independent pi session
+  (`pimu-j<id>`, same models, MCP and extensions, the bot's cwd, gate level
+  L2) and the chat stays free. States: queued, running, waiting_approval,
+  completed, failed, cancelled, interrupted, stored in SQLite.
+  `PIMU_MAX_JOBS` run at once. When a job ends, its result is sent to the bot's
+  main session as a follow-up and to the inbox. You can cancel a job, or steer
+  a running one with an extra instruction. Jobs cut off by a restart are marked
+  interrupted and never rerun on their own; you choose 重新运行 or 丢弃.
 
 ## Settings
 

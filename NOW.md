@@ -1,6 +1,6 @@
 # NOW
 
-V1–V6 built, 2026-10-30.
+V1–V8 built, 2026-10-30.
 
 - V1: Go server (pi RPC, lock, SSE replay, auth, reaper, `pimu release`), PWA chat.
 - V2: SQLite tasks/runs, cron/manual runs, retry, restart recovery, Telegram, memory page.
@@ -18,5 +18,19 @@ V1–V6 built, 2026-10-30.
 - Known gaps: guard in rpc mode only flags shutdown; screenshots with a `filename` arg
   return no image; unread marks are per device (localStorage); no tests by choice.
 - Measured: pimu RSS ≈ 11 MB; each pi ≈ 117–123 MB → `PIMU_MAX_PROCS=3` fits 2C3G.
-- V7 (design only): docs/SLASH.md (built-in slash commands are TUI-only; intercept in composer),
-  docs/AUTONOMY.md (goals + heartbeat + approval gate). Not implemented yet.
+- V7 (design): docs/SLASH.md, docs/AUTONOMY.md.
+- V8: sessions first (+ = new session, 设为 Bot on any session, home grouped by cwd);
+  autonomy P1 (goals + heartbeat with zero-token precheck, ```pimu action block,
+  pimu-agent.ts L1/L2 gate, inbox with approve-once, webhook, limits, STATE.md);
+  background jobs (`pimu_task` tool → `pimu-j*` session, queue `PIMU_MAX_JOBS`,
+  restart → interrupted, result followUp into the bot); composer slash interception.
+- Verified with the real model (box): noop beat; notify beat with dedup; L2 approval
+  round-trip (approved call ran once); webhook dedup; delegation (chat answered while the
+  job waited/ran, steer reached the job, result came back to the main session);
+  restart → interrupted, not rerun; rerun/cancel; queue of 2; /compact 26948 → ~11897.
+- Not verified: very long waits inside the gate's tool_call; whether bot MEMORY.md
+  injection reaches the prompt; gating of nested tools; 3-failure auto-disable,
+  6/hour cap and daily token cap not hit; Telegram with a real token.
+- Known P1 limits: an approval hash, once used, blocks the identical call again; an
+  approved but never re-called approval stays approved; bot main sessions carry the
+  internal token in env (needed by `pimu_task`), so the model could read it via `env`.
