@@ -62,6 +62,10 @@ type Hub struct {
 	streams map[string]*Stream
 	known   map[string]string // id -> cwd, sessions created here that may have no file yet
 
+	// Lookup supplies per-session extras: the cwd of a session that has no file
+	// yet (a new bot) and extra pi args (a bot's persona). Optional.
+	Lookup func(id string) (cwd string, args []string, ok bool)
+
 	// Global carries cross-session events (proc_state with id, run_update) for /api/events.
 	Global *Stream
 
@@ -117,7 +121,7 @@ func (h *Hub) Status(id string) string {
 	return "idle"
 }
 
-func newID() string {
+func NewID() string {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	return "pm-" + hex.EncodeToString(b)
@@ -125,7 +129,7 @@ func newID() string {
 
 // Create starts a new pi session in cwd and returns its id.
 func (h *Hub) Create(ctx context.Context, cwd string) (*Run, error) {
-	return h.CreateWithID(ctx, newID(), cwd)
+	return h.CreateWithID(ctx, NewID(), cwd)
 }
 
 // CreateWithID starts a brand-new session with a caller-chosen id (task runs).
@@ -153,6 +157,9 @@ func (h *Hub) Ensure(ctx context.Context, id string) (*Run, error) {
 	h.mu.Lock()
 	cwd, ok := h.known[id]
 	h.mu.Unlock()
+	if !ok && h.Lookup != nil {
+		cwd, _, ok = h.Lookup(id)
+	}
 	if ok {
 		return h.start(ctx, id, cwd, []string{"--session-id", id})
 	}
@@ -184,6 +191,11 @@ func (h *Hub) start(ctx context.Context, id, cwd string, sessArgs []string) (*Ru
 	r := &Run{ID: id, Cwd: cwd, lastActive: time.Now()}
 	args := append([]string{"--mode", "rpc"}, sessArgs...)
 	args = append(args, h.cfg.PiArgs...)
+	if h.Lookup != nil {
+		if _, extra, ok := h.Lookup(id); ok {
+			args = append(args, extra...)
+		}
+	}
 	env := append(os.Environ(), "PIMU_LOCK_OWNER="+id)
 	proc, err := pirpc.Start(h.cfg.PiBin, args, cwd, env, func(line []byte) { h.onEvent(r, stream, line) })
 	if err != nil {

@@ -1,4 +1,5 @@
-// Package store is Pimu's SQLite database: just the tasks and runs tables.
+// Package store is Pimu's SQLite database: tasks, runs, and bots (the
+// display metadata pi cannot hold for a session).
 // Sessions, messages, activity and memory stay in pi's own files.
 package store
 
@@ -48,6 +49,17 @@ CREATE TABLE runs (
 );
 CREATE INDEX runs_task_created ON runs(task_id, created_at DESC);
 CREATE INDEX runs_status ON runs(status) WHERE status IN ('queued','running');
+`, `
+CREATE TABLE bots (
+  session_id   TEXT    PRIMARY KEY,
+  name         TEXT    NOT NULL,
+  emoji        TEXT    NOT NULL DEFAULT '🤖',
+  description  TEXT    NOT NULL DEFAULT '',
+  persona      TEXT    NOT NULL DEFAULT '',
+  cwd          TEXT    NOT NULL,
+  archived     INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
 `}
 
 type Store struct{ db *sql.DB }
@@ -258,4 +270,69 @@ func (s *Store) Active(taskID int64) (bool, error) {
 	var n int
 	err := s.db.QueryRow(`SELECT count(*) FROM runs WHERE task_id = ? AND status IN ('queued','running')`, taskID).Scan(&n)
 	return n > 0, err
+}
+
+// Bot is a pi session presented as an assistant. The conversation, model and
+// system prompt live in pi's session file; this row adds only what pi lacks.
+type Bot struct {
+	SessionID   string `json:"id"`
+	Name        string `json:"name"`
+	Emoji       string `json:"emoji"`
+	Description string `json:"description"`
+	Persona     string `json:"persona"`
+	Cwd         string `json:"cwd"`
+	Archived    bool   `json:"archived"`
+	CreatedAt   string `json:"createdAt"`
+}
+
+const botCols = `session_id, name, emoji, description, persona, cwd, archived, created_at`
+
+func scanBot(r scanner) (Bot, error) {
+	var b Bot
+	err := r.Scan(&b.SessionID, &b.Name, &b.Emoji, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.CreatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = ErrNotFound
+	}
+	return b, err
+}
+
+func (s *Store) Bots() ([]Bot, error) {
+	rows, err := s.db.Query(`SELECT ` + botCols + ` FROM bots ORDER BY created_at`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Bot{}
+	for rows.Next() {
+		b, err := scanBot(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) Bot(id string) (Bot, error) {
+	return scanBot(s.db.QueryRow(`SELECT `+botCols+` FROM bots WHERE session_id = ?`, id))
+}
+
+func (s *Store) CreateBot(b Bot) (Bot, error) {
+	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, emoji, description, persona, cwd, archived) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		b.SessionID, b.Name, b.Emoji, b.Description, b.Persona, b.Cwd, b.Archived); err != nil {
+		return Bot{}, err
+	}
+	return s.Bot(b.SessionID)
+}
+
+func (s *Store) UpdateBot(b Bot) (Bot, error) {
+	res, err := s.db.Exec(`UPDATE bots SET name=?, emoji=?, description=?, persona=?, cwd=?, archived=? WHERE session_id=?`,
+		b.Name, b.Emoji, b.Description, b.Persona, b.Cwd, b.Archived, b.SessionID)
+	if err != nil {
+		return Bot{}, err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return Bot{}, ErrNotFound
+	}
+	return s.Bot(b.SessionID)
 }

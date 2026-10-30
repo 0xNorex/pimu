@@ -87,6 +87,22 @@ func serve() error {
 	}
 	defer st.Close()
 	h := hub.New(cfg)
+	// A bot is a pi session; its persona rides on --append-system-prompt and
+	// its name on --name until pi has recorded it.
+	h.Lookup = func(id string) (string, []string, bool) {
+		b, err := st.Bot(id)
+		if err != nil {
+			return "", nil, false
+		}
+		var args []string
+		if b.Persona != "" {
+			args = append(args, "--append-system-prompt", b.Persona)
+		}
+		if info, ok := h.Idx.Find(id); !ok || info.Name != b.Name {
+			args = append(args, "--name", b.Name)
+		}
+		return b.Cwd, args, true
+	}
 	tk := tasks.New(st, h, notify.Telegram{Token: cfg.TGToken, ChatID: cfg.TGChatID}, cfg.PublicURL)
 	srv := &http.Server{
 		Addr:              cfg.Addr,
