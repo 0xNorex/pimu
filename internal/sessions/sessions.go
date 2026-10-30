@@ -227,3 +227,37 @@ func Messages(path string) ([]json.RawMessage, error) {
 	}
 	return out, nil
 }
+
+// Meta is the model and thinking level recorded in a session file, so an
+// idle session's header can show them without starting pi.
+type Meta struct {
+	Model         *MetaModel `json:"model,omitempty"`
+	ThinkingLevel string     `json:"thinkingLevel,omitempty"`
+}
+
+type MetaModel struct {
+	Provider string `json:"provider"`
+	ID       string `json:"id"`
+}
+
+func ReadMeta(path string) Meta {
+	var m Meta
+	_ = eachLine(path, func(line []byte) {
+		var e struct {
+			Type          string `json:"type"`
+			Provider      string `json:"provider"`
+			ModelID       string `json:"modelId"`
+			ThinkingLevel string `json:"thinkingLevel"`
+		}
+		if json.Unmarshal(line, &e) != nil {
+			return
+		}
+		switch e.Type {
+		case "model_change":
+			m.Model = &MetaModel{Provider: e.Provider, ID: e.ModelID}
+		case "thinking_level_change":
+			m.ThinkingLevel = e.ThinkingLevel
+		}
+	})
+	return m
+}

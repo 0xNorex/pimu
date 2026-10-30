@@ -157,6 +157,8 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		if resp, err := s.hub.Call(r.Context(), run, map[string]any{"type": "get_state"}, 30*time.Second); err == nil && resp.Success {
 			out["state"] = resp.Data
 		}
+	} else if info, ok := s.hub.Idx.Find(id); ok {
+		out["state"] = sessions.ReadMeta(info.Path) // idle: model/thinking from the file
 	}
 	writeJSON(w, 200, out)
 }
