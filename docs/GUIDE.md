@@ -12,10 +12,13 @@ bot" form. A bot is just a
 session you marked as long-lived: open any session → 菜单 → **设为 Bot** (name
 optional, defaults to the session title or first message; avatar is an
 identicon of the session id). **取消 Bot** drops only the bot metadata (name,
-persona, goals); the pi session file and the conversation stay.
+persona, goals); the pi session file and the conversation stay. A bot's session
+file lives in `~/.local/share/pimu/bots/<id>/session/` (moved there when you set it,
+the old copy kept as `*.jsonl.pimu-moved`), so it no longer shows in a terminal
+`pi -r`; open it there with `pi --session <path>` if you need to.
 
-Home list: bots pinned on top (busy, then unread, then newest), then every
-other session expanded and grouped by working directory (folder-name headers; 主目录 for `$HOME`),
+Home list: two tabs. **Bot** (default; busy, then waiting for approval, then
+unread, then newest) and **会话**: every other session, grouped by working directory (folder-name headers; 主目录 for `$HOME`),
 including sessions you started with `pi` in a terminal (marked with a terminal
 icon). Task runs (`pimu-t*`), heartbeats (`pimu-g*`) and background jobs
 (`pimu-j*`) are hidden there and shown under their task, goal or bot. Session ids stay in 详情, not in the list.

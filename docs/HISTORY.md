@@ -103,6 +103,24 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
   strips for chat, task detail and settings, model names without the price multiplier,
   provider error JSON collapsed behind 原始信息.
 
+## V14 Bot / 会话 tabs, bot session storage, motion
+
+- Sidebar: two tabs, Bot (default) and 会话, never mixed; the last tab is remembered.
+  Bot rows carry unread, working (an orbiting ring) and 待批准 badges; 会话 keeps the
+  per-directory groups. Search covers the active tab and points to hits in the other.
+  Setting or unsetting a bot switches tabs and morphs the row across (View Transitions).
+- Bot session files live in `<data-dir>/bots/<id>/session/` via `pi --session-dir`; the
+  working directory stays the bot's cwd. Existing bots are moved at start and every
+  minute (busy ones wait), the original kept as `*.jsonl.pimu-moved`. See DESIGN.md 4.5A.
+- Motion, CSS only (no animation library): spring pill on the tabs, panel slide and
+  staggered rows, badge pops, launch animation for sent messages, hopping thinking dots,
+  springy send button, approval card nudge and pulse, spring dialogs, push/pop page
+  transitions on phones. All off under `prefers-reduced-motion`.
+- Empty states for no bots (how to set one, CTA) and the desktop idle pane; 44 px tap
+  targets on phones for header, tab, composer and footer controls.
+- Bundle: main JS 271.83 → 281.13 kB (gzip 86.51 → 89.25), CSS 90.18 → 99.81 kB
+  (gzip 15.49 → 17.34).
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's
