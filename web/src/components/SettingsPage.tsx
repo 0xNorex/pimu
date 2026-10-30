@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { api, ApiError, errMsg } from '@/lib/api'
 import { go } from '@/lib/route'
-import { getTheme, setTheme, type Theme } from '@/lib/theme'
+import { AppearanceSection } from './AppearanceSection'
 import type { Goal, Model } from '@/lib/types'
 import { every } from '@/lib/format'
 import { MemoryEditor } from './MemoryEditor'
@@ -110,7 +110,9 @@ export function SettingsPage({ section }: { section: Section }) {
       </nav>
       <ScrollArea className="flex-1">
         <div key={section} className="msg-in mx-auto flex max-w-2xl flex-col gap-6 p-4 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-          {section === 'memory' ? (
+          {section === 'appearance' ? (
+            <AppearanceSection />
+          ) : section === 'memory' ? (
             <MemoryEditor />
           ) : section === 'goals' ? (
             <GoalsSection />
@@ -375,7 +377,6 @@ function MCPSection({ s, patch }: P) {
 }
 
 function PimuSection({ s }: { s: Settings }) {
-  const [theme, setT] = useState<Theme>(getTheme)
   const [auth, setAuth] = useState<AuthStatus | null>(null)
   useEffect(() => {
     api<AuthStatus>('/api/auth/status').then(setAuth, () => {})
@@ -386,29 +387,6 @@ function PimuSection({ s }: { s: Settings }) {
   }
   return (
     <>
-      <Group title="外观">
-        <Row
-          title="主题"
-          right={
-            <Select
-              value={theme}
-              onValueChange={(v) => {
-                setT(v as Theme)
-                setTheme(v as Theme)
-              }}
-            >
-              <SelectTrigger className="h-9 w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="system">跟随系统</SelectItem>
-                <SelectItem value="light">浅色</SelectItem>
-                <SelectItem value="dark">深色</SelectItem>
-              </SelectContent>
-            </Select>
-          }
-        />
-      </Group>
       <Group title="通知" hint="Telegram 由启动 Pimu 的环境变量 PIMU_TELEGRAM_TOKEN / PIMU_TELEGRAM_CHAT_ID 配置，只在任务完成或失败时提醒。">
         <Row title="Telegram" right={s.telegram.configured ? <Badge variant="secondary" className="text-emerald-600 dark:text-emerald-400">已配置{s.telegram.chat ? ` · ${s.telegram.chat}` : ''}</Badge> : <Badge variant="outline">未配置</Badge>} />
       </Group>

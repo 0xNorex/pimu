@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
 import { BUILTINS, parseBuiltin } from '@/lib/slash'
+import { getPrefs } from '@/lib/prefs'
 
 type Image = { type: 'image'; data: string; mimeType: string }
 type Att = { key: string; file: File; url?: string; path?: string; busy?: boolean }
@@ -129,12 +130,18 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
       toast.error(errMsg(e))
       return
     }
-    if (await onSend(t, behavior, images)) {
-      setText('')
-      atts.forEach((a) => a.url && URL.revokeObjectURL(a.url))
-      setAtts([])
-    }
+    // Clear right away, not after the request: anything typed while it is in
+    // flight (the next follow-up, a steer) must survive, and a second Enter
+    // must not send the same text twice. Put it back if the send failed.
+    const sent = { text, atts }
+    setText('')
+    setAtts([])
     ref.current?.focus()
+    if (await onSend(t, behavior, images)) sent.atts.forEach((a) => a.url && URL.revokeObjectURL(a.url))
+    else {
+      setText((cur) => cur || sent.text)
+      setAtts((cur) => (cur.length ? cur : sent.atts))
+    }
   }
 
   const mic = () => {
@@ -180,7 +187,9 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
   }
 
   const onKey = (e: KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.nativeEvent.isComposing) {
+    // Enter sends (Shift+Enter: newline), or with sendKey=mod only ⌘/Ctrl+Enter sends.
+    const mod = getPrefs().sendKey === 'mod'
+    if (e.key === 'Enter' && !e.shiftKey && !coarse && !e.nativeEvent.isComposing && (!mod || e.metaKey || e.ctrlKey)) {
       e.preventDefault()
       void send(streaming ? 'followUp' : undefined)
     }
@@ -188,7 +197,7 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
 
   return (
     <div
-      className="mx-auto w-full max-w-3xl px-3 pt-1 pb-[max(env(safe-area-inset-bottom),10px)]"
+      className="mx-auto w-full max-w-(--chat-w) px-3 pt-1 pb-[max(env(safe-area-inset-bottom),10px)]"
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -250,7 +259,7 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
           e.target.value = ''
         }}
       />
-      <div className={`flex items-end gap-0.5 rounded-[24px] border bg-card p-1 shadow-soft transition-shadow focus-within:ring-3 focus-within:ring-ring/25 ${dragging ? 'ring-2 ring-primary' : ''}`}>
+      <div className={`flex items-end gap-0.5 rounded-[calc(var(--radius)*2)] border bg-card p-1 shadow-soft transition-shadow duration-300 focus-within:shadow-(--shadow-lift) focus-within:ring-3 focus-within:ring-ring/25 ${dragging ? 'ring-2 ring-primary' : ''}`}>
         <Button size="icon" variant="ghost" className="size-11 lg:size-10 shrink-0 rounded-full text-muted-foreground" aria-label="添加图片或文件" title="添加图片或文件" onClick={() => picker.current?.click()} disabled={disabled}>
           <PaperclipIcon />
         </Button>

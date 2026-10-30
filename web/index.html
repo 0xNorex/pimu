@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" />
-    <meta name="theme-color" content="#0a0a0a" />
+    <meta name="theme-color" content="#fbfaf8" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -13,19 +13,27 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <title>Pimu</title>
     <script>
-      // Theme: localStorage "pimu-theme" = light | dark | system (default). shadcn's dark variant keys off .dark.
+      // Appearance before first paint (no flash). localStorage "pimu-prefs" = {prefs, at};
+      // visual prefs become data-* on <html>, theme becomes .dark (shadcn's dark variant).
+      // lib/prefs.ts writes the key and fires "pimu-prefs"; C = theme-color per palette [light, dark].
       ;(function () {
-        var mq = matchMedia('(prefers-color-scheme: dark)')
+        var D = { palette: 'paper', font: 'm', density: 'comfortable', width: 'normal', radius: 'normal', motion: 'system', mono: 'geist', code: 'soft', texture: true }
+        var C = {"paper":["#fbfaf8","#0d0e11"],"neutral":["#fafafa","#0e0e0f"],"ocean":["#f6fbfd","#090f14"],"forest":["#f8fbf6","#0b100d"],"rose":["#fef9f8","#120d0d"],"contrast":["#ffffff","#010101"]}
+        var mq = matchMedia('(prefers-color-scheme: dark)'), h = document.documentElement
         var set = function () {
-          var t = localStorage.getItem('pimu-theme') || 'system'
+          var p = {}
+          try { p = (JSON.parse(localStorage.getItem('pimu-prefs') || 'null') || {}).prefs || {} } catch (e) {}
+          for (var k in D) { var v = p[k] == null ? D[k] : p[k]; h.setAttribute('data-' + k, v === true ? 'on' : v === false ? 'off' : v) }
+          var t = p.theme || localStorage.getItem('pimu-theme') || 'system'
           var dark = t === 'dark' || (t === 'system' && mq.matches)
-          document.documentElement.classList.toggle('dark', dark)
-          var m = document.querySelector('meta[name=theme-color]')
-          if (m) m.setAttribute('content', dark ? '#16161c' : '#fbfaf8')
+          h.classList.toggle('dark', dark)
+          h.style.colorScheme = dark ? 'dark' : 'light'
+          var m = document.querySelector('meta[name=theme-color]'), c = C[h.getAttribute('data-palette')] || C.paper
+          if (m && c) m.setAttribute('content', c[dark ? 1 : 0])
         }
         set()
         mq.addEventListener('change', set)
-        window.addEventListener('pimu-theme', set)
+        addEventListener('pimu-prefs', set)
       })()
     </script>
   </head>

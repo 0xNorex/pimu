@@ -5,6 +5,7 @@ import { AlertCircleIcon, BrainIcon, ChevronRightIcon, FileIcon, LayersIcon } fr
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { ToolCallRow, type ToolView } from './ToolCallRow'
 import type { Item } from '@/lib/timeline'
+import { getPrefs } from '@/lib/prefs'
 
 const remark = [remarkGfm]
 
@@ -18,7 +19,7 @@ const Md = memo(function Md({ text }: { text: string }) {
 
 function ThinkingBlock({ text, live }: { text: string; live: boolean }) {
   return (
-    <Collapsible>
+    <Collapsible defaultOpen={getPrefs().thinking}>
       <CollapsibleTrigger className="group flex min-h-7 w-full items-center gap-2 rounded-md px-1 text-left text-[13px] text-muted-foreground hover:bg-muted/60">
         <ChevronRightIcon className="size-3.5 transition-transform group-data-[state=open]:rotate-90 motion-reduce:transition-none" />
         <BrainIcon className="size-3.5" />
@@ -32,7 +33,7 @@ function ThinkingBlock({ text, live }: { text: string; live: boolean }) {
 function ToolGroup({ tools }: { tools: ToolView[] }) {
   const hasError = tools.some((t) => t.status === 'error')
   const running = tools.some((t) => t.status === 'running')
-  const [open, setOpen] = useState(hasError)
+  const [open, setOpen] = useState(() => hasError || getPrefs().tools)
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
       <CollapsibleTrigger className="flex min-h-7 w-full items-center gap-2 rounded-md px-1 text-left text-[13px] text-muted-foreground hover:bg-muted/60">
@@ -76,7 +77,7 @@ export function MessageItem({ item }: { item: Item }) {
                 ))}
               </div>
             )}
-            {body && <div className="rounded-[20px] rounded-br-md bg-bubble px-3.5 py-2 break-words whitespace-pre-wrap text-bubble-foreground shadow-soft">{body}</div>}
+            {body && <div className="rounded-[calc(var(--radius)*1.66)] rounded-br-md bg-bubble px-3.5 py-2 break-words whitespace-pre-wrap text-bubble-foreground shadow-soft">{body}</div>}
             {files.map((f) => (
               <div key={f.path} title={f.path} className="flex max-w-full items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm shadow-soft">
                 <FileIcon className="size-4 shrink-0 text-muted-foreground" />

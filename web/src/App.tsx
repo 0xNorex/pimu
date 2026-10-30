@@ -17,6 +17,7 @@ const TaskDetail = lazy(() => import('@/components/TaskDetail').then((m) => ({ d
 const TasksPage = lazy(() => import('@/components/TasksPage').then((m) => ({ default: m.TasksPage })))
 const InboxPage = lazy(() => import('@/components/InboxPage').then((m) => ({ default: m.InboxPage })))
 import { useHashRoute } from '@/lib/route'
+import { pullPrefs } from '@/lib/prefs'
 
 const wideQ = typeof matchMedia !== 'undefined' ? matchMedia('(min-width: 1024px)') : undefined
 const useWide = () =>
@@ -34,6 +35,15 @@ export default function App() {
     const t = setTimeout(() => void loadChat().catch(() => {}), 1200)
     return () => clearTimeout(t)
   }, [])
+  // Appearance follows you across devices: adopt the server's copy if newer (and when the tab returns).
+  const signedIn = route.name !== 'login'
+  useEffect(() => {
+    if (!signedIn) return
+    void pullPrefs()
+    const on = () => document.visibilityState === 'visible' && void pullPrefs()
+    document.addEventListener('visibilitychange', on)
+    return () => document.removeEventListener('visibilitychange', on)
+  }, [signedIn])
   const page =
     route.name === 'session' ? (
       chatMod ? <chatMod.ChatView key={route.id} id={route.id} /> : <LazyChat key={route.id} id={route.id} />
@@ -44,7 +54,7 @@ export default function App() {
     ) : route.name === 'task' ? (
       <TaskDetail key={route.id} id={route.id} bot={route.bot} />
     ) : route.name === 'settings' ? (
-      <SettingsPage section={(SECTIONS.some(([k]) => k === route.section) ? route.section : 'models') as Section} />
+      <SettingsPage section={(SECTIONS.some(([k]) => k === route.section) ? route.section : 'appearance') as Section} />
     ) : null
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">

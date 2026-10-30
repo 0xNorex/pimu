@@ -93,6 +93,7 @@ export type Bot = {
   status: SessionSummary['status']
   last?: string
   lastRole?: 'user' | 'assistant'
+  jobsRunning?: number
 }
 
 export type SessionState = {

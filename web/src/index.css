@@ -25,7 +25,7 @@
     --font-heading: var(--font-sans);
     /* Geist for Latin/digits (self-hosted, latin subset only); CJK falls through to the OS face. */
     --font-sans: "Geist Variable", -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
-    --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+    --font-mono: var(--mono-font);
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -69,82 +69,119 @@
     --radius-4xl: calc(var(--radius) * 2.6);
 }
 
-:root {
-    /* "Calm assistant": warm paper neutrals + one quiet indigo accent (OKLCH, Linear-style few knobs). */
-    --background: oklch(0.985 0.003 85);
-    --foreground: oklch(0.2 0.008 270);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.2 0.008 270);
+/* ---- Tokens. A palette is a handful of knobs (neutral hue/chroma, ink hue, accent hue/chroma/lightness);
+   every surface derives from them, light and dark. [data-palette] re-derives locally, so a preview swatch
+   can show another palette in place. ---- */
+:root, [data-palette="paper"] { --nh: 85; --nc: 0.003; --fh: 270; --dh: 275; --dc: 0.006; --ph: 272; --pc: 0.15; --pl: 0.53; --pdl: 0.72; }
+[data-palette="neutral"] { --nh: 270; --nc: 0; --fh: 270; --dh: 270; --dc: 0.002; --ph: 270; --pc: 0.008; --pl: 0.24; --pdl: 0.93; }
+[data-palette="ocean"] { --nh: 225; --nc: 0.006; --fh: 245; --dh: 240; --dc: 0.014; --ph: 238; --pc: 0.13; --pl: 0.55; --pdl: 0.74; }
+[data-palette="forest"] { --nh: 130; --nc: 0.007; --fh: 160; --dh: 160; --dc: 0.01; --ph: 155; --pc: 0.11; --pl: 0.5; --pdl: 0.74; }
+[data-palette="rose"] { --nh: 25; --nc: 0.006; --fh: 10; --dh: 10; --dc: 0.01; --ph: 8; --pc: 0.15; --pl: 0.56; --pdl: 0.74; }
+[data-palette="contrast"] { --nh: 270; --nc: 0; --fh: 270; --dh: 270; --dc: 0; --ph: 262; --pc: 0.2; --pl: 0.46; --pdl: 0.8; }
+
+:root, [data-palette] {
+    --background: oklch(0.985 var(--nc) var(--nh));
+    --foreground: oklch(0.2 0.008 var(--fh));
+    --card: oklch(0.998 calc(var(--nc) * 0.4) var(--nh));
+    --card-foreground: var(--foreground);
     --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.2 0.008 270);
-    --primary: oklch(0.53 0.15 272);
+    --popover-foreground: var(--foreground);
+    --primary: oklch(var(--pl) var(--pc) var(--ph));
     --primary-foreground: oklch(0.99 0 0);
-    --secondary: oklch(0.955 0.005 85);
-    --secondary-foreground: oklch(0.25 0.008 270);
-    --muted: oklch(0.955 0.005 85);
-    --muted-foreground: oklch(0.52 0.01 270);
-    --accent: oklch(0.95 0.012 272);
-    --accent-foreground: oklch(0.3 0.08 272);
+    --secondary: oklch(0.955 calc(var(--nc) + 0.002) var(--nh));
+    --secondary-foreground: oklch(0.25 0.008 var(--fh));
+    --muted: oklch(0.955 calc(var(--nc) + 0.002) var(--nh));
+    --muted-foreground: oklch(0.52 0.01 var(--fh));
+    --accent: oklch(0.95 calc(var(--pc) * 0.08) var(--ph));
+    --accent-foreground: oklch(0.3 calc(var(--pc) * 0.53) var(--ph));
     --destructive: oklch(0.577 0.2 27);
-    --border: oklch(0.2 0.01 270 / 9%);
-    --input: oklch(0.2 0.01 270 / 12%);
-    --ring: oklch(0.53 0.15 272 / 60%);
+    --border: oklch(0.2 0.01 var(--fh) / 9%);
+    --input: oklch(0.2 0.01 var(--fh) / 12%);
+    --ring: oklch(var(--pl) var(--pc) var(--ph) / 60%);
     --chart-1: oklch(0.87 0 0);
     --chart-2: oklch(0.556 0 0);
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --radius: 0.75rem;
-    --sidebar: oklch(0.975 0.004 85);
-    --sidebar-foreground: oklch(0.2 0.008 270);
-    --sidebar-primary: oklch(0.53 0.15 272);
-    --sidebar-primary-foreground: oklch(0.99 0 0);
-    --sidebar-accent: oklch(0.95 0.005 85);
-    --sidebar-accent-foreground: oklch(0.2 0.008 270);
-    --sidebar-border: oklch(0.2 0.01 270 / 8%);
-    --sidebar-ring: oklch(0.53 0.15 272 / 60%);
-    --bubble: oklch(0.53 0.15 272);
-    --bubble-foreground: oklch(0.99 0 0);
-    --shadow-soft: 0 1px 2px oklch(0.2 0.02 270 / 6%), 0 8px 24px -8px oklch(0.2 0.02 270 / 12%);
-    --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+    --sidebar: oklch(0.975 calc(var(--nc) + 0.001) var(--nh));
+    --sidebar-foreground: var(--foreground);
+    --sidebar-primary: var(--primary);
+    --sidebar-primary-foreground: var(--primary-foreground);
+    --sidebar-accent: var(--secondary);
+    --sidebar-accent-foreground: var(--foreground);
+    --sidebar-border: oklch(0.2 0.01 var(--fh) / 8%);
+    --sidebar-ring: var(--ring);
+    --bubble: var(--primary);
+    --bubble-foreground: var(--primary-foreground);
+    /* Two-layer shadows tinted with the ink hue: a contact line plus a soft ambient. */
+    --shadow-soft: var(--edge), 0 1px 2px oklch(0.2 0.02 var(--fh) / 6%), 0 8px 24px -8px oklch(0.2 0.02 var(--fh) / 12%);
+    --shadow-lift: 0 1px 1px oklch(0.2 0.02 var(--fh) / 5%), 0 2px 4px oklch(0.2 0.02 var(--fh) / 5%), 0 16px 40px -12px oklch(0.2 0.02 var(--fh) / 22%);
+    /* 1px top highlight on raised surfaces (cards, composer): reads as a lit edge. */
+    --edge: inset 0 1px 0 oklch(1 0 0 / 70%);
+    --code-bg: var(--muted);
+    --code-fg: inherit;
 }
+:root { --mono-font: "Geist Mono Variable", ui-monospace, "SF Mono", Menlo, monospace; --radius: 0.75rem; --chat-fs: 15px; --chat-w: 48rem; --msg-gap: 0.75rem; --row-h: 60px; --ease-out: cubic-bezier(0.22, 1, 0.36, 1); }
 
-.dark {
-    --background: oklch(0.165 0.006 275);
-    --foreground: oklch(0.95 0.004 275);
-    --card: oklch(0.2 0.007 275);
-    --card-foreground: oklch(0.95 0.004 275);
-    --popover: oklch(0.215 0.008 275);
-    --popover-foreground: oklch(0.95 0.004 275);
-    --primary: oklch(0.72 0.12 275);
-    --primary-foreground: oklch(0.17 0.02 275);
-    --secondary: oklch(0.24 0.008 275);
-    --secondary-foreground: oklch(0.95 0.004 275);
-    --muted: oklch(0.235 0.008 275);
-    --muted-foreground: oklch(0.68 0.01 275);
-    --accent: oklch(0.27 0.03 275);
-    --accent-foreground: oklch(0.92 0.03 275);
+.dark, .dark [data-palette] {
+    --background: oklch(0.165 var(--dc) var(--dh));
+    --foreground: oklch(0.95 0.004 var(--dh));
+    --card: oklch(0.2 calc(var(--dc) + 0.001) var(--dh));
+    --popover: oklch(0.215 calc(var(--dc) + 0.002) var(--dh));
+    --primary: oklch(var(--pdl) calc(var(--pc) * 0.8) var(--ph));
+    --primary-foreground: oklch(0.17 calc(var(--pc) * 0.13) var(--ph));
+    --secondary: oklch(0.24 calc(var(--dc) + 0.002) var(--dh));
+    --secondary-foreground: var(--foreground);
+    --muted: oklch(0.235 calc(var(--dc) + 0.002) var(--dh));
+    --muted-foreground: oklch(0.68 0.01 var(--dh));
+    --accent: oklch(0.27 calc(var(--pc) * 0.2) var(--ph));
+    --accent-foreground: oklch(0.92 calc(var(--pc) * 0.2) var(--ph));
     --destructive: oklch(0.7 0.17 22);
     --border: oklch(1 0 0 / 8%);
     --input: oklch(1 0 0 / 12%);
-    --ring: oklch(0.72 0.12 275 / 55%);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.185 0.007 275);
-    --sidebar-foreground: oklch(0.95 0.004 275);
-    --sidebar-primary: oklch(0.72 0.12 275);
-    --sidebar-primary-foreground: oklch(0.17 0.02 275);
-    --sidebar-accent: oklch(0.24 0.008 275);
-    --sidebar-accent-foreground: oklch(0.95 0.004 275);
+    --ring: oklch(var(--pdl) calc(var(--pc) * 0.8) var(--ph) / 55%);
+    --sidebar: oklch(0.185 calc(var(--dc) + 0.001) var(--dh));
     --sidebar-border: oklch(1 0 0 / 7%);
-    --sidebar-ring: oklch(0.72 0.12 275 / 55%);
-    --bubble: oklch(0.36 0.07 275);
-    --bubble-foreground: oklch(0.97 0.01 275);
-    --shadow-soft: 0 1px 2px oklch(0 0 0 / 30%), 0 10px 30px -10px oklch(0 0 0 / 50%);
+    --bubble: oklch(0.36 calc(var(--pc) * 0.47) var(--ph));
+    --bubble-foreground: oklch(0.97 0.01 var(--ph));
+    --shadow-soft: var(--edge), 0 1px 2px oklch(0 0 0 / 30%), 0 10px 30px -10px oklch(0 0 0 / 50%);
+    --shadow-lift: 0 1px 2px oklch(0 0 0 / 35%), 0 18px 44px -12px oklch(0 0 0 / 60%);
+    --edge: inset 0 1px 0 oklch(1 0 0 / 6%);
 }
+/* High contrast: pure neutrals, ink-dark text, borders you can see. Same token set in both modes. */
+:is(:root, [data-palette])[data-palette="contrast"] {
+    --background: oklch(1 0 0); --card: oklch(1 0 0); --popover: oklch(1 0 0); --sidebar: oklch(0.975 0 0);
+    --foreground: oklch(0.1 0 0); --muted: oklch(0.93 0 0); --secondary: oklch(0.93 0 0);
+    --muted-foreground: oklch(0.34 0 0); --border: oklch(0 0 0 / 32%); --sidebar-border: oklch(0 0 0 / 32%); --input: oklch(0 0 0 / 45%);
+    --accent: oklch(0.9 0.05 262); --accent-foreground: oklch(0.2 0.1 262); --bubble: var(--primary); --bubble-foreground: oklch(1 0 0);
+}
+.dark[data-palette="contrast"], .dark [data-palette="contrast"] {
+    --background: oklch(0.06 0 0); --card: oklch(0.12 0 0); --popover: oklch(0.14 0 0); --sidebar: oklch(0.1 0 0);
+    --foreground: oklch(1 0 0); --muted: oklch(0.2 0 0); --secondary: oklch(0.2 0 0);
+    --muted-foreground: oklch(0.84 0 0); --border: oklch(1 0 0 / 34%); --sidebar-border: oklch(1 0 0 / 34%); --input: oklch(1 0 0 / 45%);
+    --accent: oklch(0.3 0.08 262); --accent-foreground: oklch(0.97 0.03 262); --bubble: var(--primary); --bubble-foreground: oklch(0.08 0 0);
+}
+
+/* Personalisation knobs (data-* set by index.html's boot script). */
+html[data-font="s"] { --chat-fs: 14px; }
+html[data-font="l"] { --chat-fs: 16.5px; }
+html[data-width="narrow"] { --chat-w: 40rem; }
+html[data-width="wide"] { --chat-w: 64rem; }
+html[data-radius="sharp"] { --radius: 0.375rem; }
+html[data-radius="round"] { --radius: 1.05rem; }
+html[data-density="compact"] { --msg-gap: 0.4rem; --row-h: 50px; }
+html[data-mono="system"] { --mono-font: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+/* "Ink" code: dark blocks in both modes, like an editor pane. */
+html[data-code="ink"] { --code-bg: oklch(0.22 0.012 var(--fh)); --code-fg: oklch(0.93 0.01 var(--fh)); }
+html.dark[data-code="ink"] { --code-bg: oklch(0.12 0.01 var(--dh)); }
+
+/* Paper grain: a 2% fractal-noise tile over the canvas. Pure decoration; off with texture=off. */
+html[data-texture="on"] body::after {
+  content: ""; position: fixed; inset: 0; z-index: 60; pointer-events: none; opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .6 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+html.dark[data-texture="on"] body::after { opacity: 0.045; filter: invert(1); }
+html[data-palette="contrast"] body::after { display: none; }
 
 @layer base {
   * {
@@ -169,8 +206,8 @@
 .prose-pimu ul { list-style: disc; }
 .prose-pimu ol { list-style: decimal; }
 .prose-pimu a { text-decoration: underline; text-underline-offset: 2px; }
-.prose-pimu :not(pre) > code { font-family: var(--font-mono); font-size: 13px; background: var(--muted); padding: 0.1em 0.3em; border-radius: 4px; }
-.prose-pimu pre { font-family: var(--font-mono); font-size: 13px; background: var(--muted); padding: 0.6em 0.75em; border-radius: 6px; overflow-x: auto; }
+.prose-pimu :not(pre) > code { font-family: var(--mono-font); font-size: 0.87em; background: var(--muted); padding: 0.1em 0.3em; border-radius: 4px; }
+.prose-pimu pre { font-family: var(--mono-font); font-size: 13px; line-height: 1.55; background: var(--code-bg); color: var(--code-fg); padding: 0.7em 0.85em; border-radius: calc(var(--radius) * 0.7); overflow-x: auto; box-shadow: inset 0 0 0 1px var(--border); }
 .prose-pimu table { display: block; overflow-x: auto; border-collapse: collapse; font-size: 14px; }
 .prose-pimu :is(th, td) { border: 1px solid var(--border); padding: 0.25em 0.5em; }
 .prose-pimu blockquote { border-left: 3px solid var(--border); padding-left: 0.75em; color: var(--muted-foreground); }
@@ -317,13 +354,23 @@ html[data-vt="push"] .vt-row, html[data-vt="pop"] .vt-row { view-transition-name
 /* Rows changing tabs: morph position, crossfade content. */
 html[data-vt="move"]::view-transition-group(*) { animation-duration: 420ms; animation-timing-function: var(--ease-spring); }
 
+/* Theme / palette change: the new look grows as a circle from the control (lib/prefs.ts reveal()). */
+html[data-vt="theme"]::view-transition-old(root), html[data-vt="theme"]::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html[data-vt="theme"] .vt-row { view-transition-name: none !important; }
+
+/* Motion preference: "off" (or the OS asking, unless the user chose "full") stops everything;
+   "reduced" lets loops play once and drops the springs. */
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
-  .shimmer { color: var(--muted-foreground); background: none; }
-  .avatar-working::before { animation: none; background: var(--primary); }
-  .seg-pill { transition: none; }
+  html[data-motion="system"] :is(*, *::before, *::after) { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  html[data-motion="system"] .shimmer { color: var(--muted-foreground); background: none; }
+  html[data-motion="system"] .avatar-working::before { animation: none; background: var(--primary); }
 }
+html[data-motion="off"] :is(*, *::before, *::after) { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+html[data-motion="off"] .shimmer { color: var(--muted-foreground); background: none; }
+html[data-motion="off"] .avatar-working::before { animation: none; background: var(--primary); }
+html[data-motion="reduced"] { --ease-spring: var(--ease-out); }
+html[data-motion="reduced"] :is(*, *::before, *::after) { animation-iteration-count: 1 !important; }
+html[data-motion="reduced"] .shimmer { color: var(--muted-foreground); background: none; }
 html, body, #root { height: 100%; }
 /* iOS: main.tsx pins the app to the visual viewport so the composer rides above the keyboard. */
 #root { height: var(--app-h, 100dvh); }

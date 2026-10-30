@@ -29,7 +29,7 @@ export function ChatApprovals({ botId }: { botId: string }) {
   }
   if (!items.length) return null
   return (
-    <div className="mx-auto w-full max-w-3xl space-y-2 px-4 pb-2">
+    <div className="mx-auto w-full max-w-(--chat-w) space-y-2 px-4 pb-2">
       {items.map((it) => (
         <div key={it.id} role="alert" className="attention-card rounded-xl border border-amber-300 bg-amber-50 p-3 text-sm shadow-soft dark:border-amber-700 dark:bg-amber-950/40">
           <div className="flex items-center gap-2 font-medium">

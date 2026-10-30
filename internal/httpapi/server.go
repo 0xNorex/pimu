@@ -94,6 +94,8 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/runs", s.handleRuns)
 	api.HandleFunc("GET /api/memory", s.handleMemoryGet)
 	api.HandleFunc("PUT /api/memory", s.handleMemoryPut)
+	api.HandleFunc("GET /api/prefs", s.handlePrefsGet)
+	api.HandleFunc("PUT /api/prefs", s.handlePrefsPut)
 	api.HandleFunc("GET /api/settings", s.handleSettingsGet)
 	api.HandleFunc("PATCH /api/settings/model", s.handleSettingsModel)
 	api.HandleFunc("PATCH /api/settings/extension", s.handleSettingsExtension)

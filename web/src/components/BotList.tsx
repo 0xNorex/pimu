@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { ArrowRightIcon, BellIcon, CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, ShieldAlertIcon, SquarePenIcon, TerminalIcon, XIcon } from 'lucide-react'
+import { ArrowRightIcon, BellIcon, CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, ShieldAlertIcon, SquarePenIcon, MoonIcon, SunIcon, TerminalIcon, XIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
 import { Input } from '@/components/ui/input'
@@ -13,6 +13,7 @@ import type { Route } from '@/lib/route'
 import { isUnread } from '@/lib/seen'
 import type { Bot, InboxItem, SessionSummary, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
+import { isDark, reveal } from '@/lib/prefs'
 import { BotAvatar } from './BotAvatar'
 import { openNewSession } from './NewSessionDialog'
 
@@ -64,7 +65,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   const load = () => {
     fetchAll()
       .then(([b, s]) => {
-        const next = b.map((x) => `${x.id}:${x.status}:${x.updatedAt}`).join()
+        const next = b.map((x) => `${x.id}:${x.status}:${x.jobsRunning ?? 0}:${x.updatedAt}`).join()
         const apply = () => flushSync(() => (setBots(b), setSessions(s)))
         if (order.current && next !== order.current) transition(apply)
         else apply()
@@ -90,6 +91,16 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   }, [])
   useGlobalEvents(load)
 
+  // Opening a chat from elsewhere (inbox, link, notification) shows the tab it lives in,
+  // so its row is visible and highlighted. Only on navigation: browsing tabs stays free.
+  const loaded = bots !== null && sessions !== null
+  useEffect(() => {
+    if (!activeId || !loaded) return
+    if (bots!.some((b) => b.id === activeId)) setTab('bots')
+    else if (sessions!.some((x) => x.id === activeId)) setTab('sessions')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, loaded])
+
   // Set / unset as bot: follow the row to its new tab, morphing it across.
   useEffect(() => {
     const on = (e: Event) => {
@@ -97,7 +108,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
       const to: Tab = bot ? 'bots' : 'sessions'
       fetchAll()
         .then(([b, s]) => {
-          order.current = b.map((x) => `${x.id}:${x.status}:${x.updatedAt}`).join()
+          order.current = b.map((x) => `${x.id}:${x.status}:${x.jobsRunning ?? 0}:${x.updatedAt}`).join()
           transition(() =>
             flushSync(() => {
               setBots(b)
@@ -125,7 +136,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
 
   // Busy first, then waiting / unread, then most recent — like a messaging app.
   const [active, archived] = useMemo(() => {
-    const rank = (b: Bot) => (b.status === 'streaming' ? 3 : waiting.has(b.id) ? 2 : isUnreadBot(b) ? 1 : 0)
+    const rank = (b: Bot) => (b.status === 'streaming' || b.jobsRunning ? 3 : waiting.has(b.id) ? 2 : isUnreadBot(b) ? 1 : 0)
     const list = (bots ?? []).filter((b) => match(b.name, b.description, b.last))
     list.sort((a, b) => rank(b) - rank(a) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt))
     return [list.filter((b) => !b.archived), list.filter((b) => b.archived)]
@@ -158,14 +169,14 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   const row = (b: Bot, i: number) => {
     const un = isUnreadBot(b)
     const wait = waiting.get(b.id) ?? 0
-    const working = b.status === 'streaming' || busy.has(b.id)
+    const working = b.status === 'streaming' || busy.has(b.id) || !!b.jobsRunning
     return (
       <a
         key={b.id}
         href={`#/s/${b.id}`}
         style={{ ...vtName(b.id), ...stagger(i) }}
         aria-current={b.id === activeId ? 'page' : undefined}
-        className="vt-row row-in pressable mx-2 flex min-h-[60px] items-center gap-3 rounded-xl px-2.5 py-2 outline-none hover:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent"
+        className="vt-row row-in pressable mx-2 flex min-h-(--row-h) items-center gap-3 rounded-xl px-2.5 py-2 outline-none hover:bg-foreground/[0.04] focus-visible:ring-2 focus-visible:ring-ring aria-[current=page]:bg-accent"
       >
         <span className={`relative shrink-0 ${working ? 'avatar-working' : ''}`}>
           <BotAvatar id={b.id} className="size-10" />
@@ -178,7 +189,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           </div>
           <div className="flex items-center gap-2">
             <span className={`min-w-0 flex-1 truncate text-sm ${un ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {b.status === 'streaming' ? <span className="shimmer">正在回复…</span> : b.last ? `${b.lastRole === 'user' ? '我：' : ''}${plain(b.last)}` : b.description || '还没有对话'}
+              {b.status === 'streaming' ? <span className="shimmer">正在回复…</span> : b.jobsRunning ? <span className="shimmer">后台任务进行中{b.jobsRunning > 1 ? ` · ${b.jobsRunning}` : ''}</span> : b.last ? `${b.lastRole === 'user' ? '我：' : ''}${plain(b.last)}` : b.description || '还没有对话'}
             </span>
             {wait > 0 ? (
               <span className="attention inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400" title={`${wait} 个审批等你处理`}>
@@ -443,6 +454,16 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
             <Icon className="size-4" /> {label}
           </a>
         ))}
+        <button
+          type="button"
+          title="切换浅色 / 深色"
+          aria-label="切换浅色 / 深色"
+          onClick={(e) => reveal({ theme: isDark() ? 'light' : 'dark' }, e.currentTarget)}
+          className="pressable flex size-11 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-foreground/[0.04] hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring lg:size-9"
+        >
+          <SunIcon className="hidden size-4 dark:block" />
+          <MoonIcon className="size-4 dark:hidden" />
+        </button>
       </footer>
     </div>
   )

@@ -1,5 +1,6 @@
 // Settings sections; kept apart so the lazy Settings chunk is not pulled into the shell.
 export const SECTIONS = [
+  ['appearance', '外观'],
   ['models', '模型'],
   ['extensions', '扩展'],
   ['skills', 'Skills'],

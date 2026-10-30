@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { ArrowDownIcon, ChevronLeftIcon, EllipsisVerticalIcon, RotateCcwIcon } from 'lucide-react'
-import { haptic } from '@/lib/theme'
+import { haptic } from '@/lib/prefs'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
@@ -238,7 +238,7 @@ export function ChatView({ id }: { id: string }) {
   const model = detail?.state?.model?.provider !== 'unknown' ? cleanModel(detail?.state?.model?.name || modelName || detail?.state?.model?.id) : undefined
 
   return (
-    <div className="page-in flex h-full min-w-0 flex-1 flex-col">
+    <main className="page-in flex h-full min-w-0 flex-1 flex-col">
       <header className="z-10 box-content flex h-14 shrink-0 items-center gap-1 bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
         <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
           <ChevronLeftIcon />
@@ -292,7 +292,7 @@ export function ChatView({ id }: { id: string }) {
         </div>
         <TabsContent value="chat" className="relative min-h-0 flex-1">
           <ScrollArea viewportRef={scroller} onScroll={onScroll} className="h-full">
-            <div className="mx-auto flex max-w-3xl flex-col gap-3 px-4 py-4 text-[15px] leading-relaxed">
+            <div className="mx-auto flex max-w-(--chat-w) flex-col gap-(--msg-gap) px-4 py-4 text-(length:--chat-fs) leading-relaxed">
               {!s.loaded && [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
               {s.loaded && items.length === 0 && (
                 <div className="py-12 text-center text-sm text-muted-foreground">
@@ -397,6 +397,6 @@ export function ChatView({ id }: { id: string }) {
         </SheetContent>
       </Sheet>
       <ModelPicker open={settings} onOpenChange={setSettings} detail={detail} onSaved={refreshDetail} />
-    </div>
+    </main>
   )
 }
