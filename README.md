@@ -1,199 +1,156 @@
 # Pimu
 
-Not another agent harness. Just Pi, everywhere.
+**Not another agent harness. Just Pi, everywhere.**
 
-Pimu is a thin Go server plus a mobile-first PWA around the unmodified
-[`pi`](https://github.com/earendil-works/pi) CLI. It runs `pi --mode rpc` per
-session and streams its events to the browser. Models, tools, MCP, sessions
-and auth all stay in pi. Design: [docs/DESIGN.md](docs/DESIGN.md). Status: [NOW.md](NOW.md).
+Pimu is a thin Go server and a mobile-first PWA around the unmodified
+[`pi`](https://github.com/earendil-works/pi) coding agent. It runs `pi --mode rpc`
+for each session and streams its events to your browser or iPhone. Models, tools,
+MCP, skills, sessions and auth all stay in pi; Pimu adds the things a phone needs:
+a chat UI, long-lived bots, schedules, background jobs and approvals.
 
-## Requirements
+<p>
+  <img src="docs/screenshots/home-iphone-dark.webp" width="200" alt="Home on iPhone, dark">
+  <img src="docs/screenshots/chat-iphone-dark.webp" width="200" alt="Chat on iPhone with a job result">
+  <img src="docs/screenshots/safety-mode-iphone-dark.webp" width="200" alt="Bot safety mode setting">
+</p>
 
-- Go ≥ 1.26, Node ≥ 22 (build only)
-- `npm i -g @earendil-works/pi-coding-agent` (tested with 1.4.0), then run `pi` once
-  in a terminal and `/login` (or configure `~/.pi/agent/models.json`)
+## Why
 
-## Build
+- You already use `pi` in a terminal and want the same sessions from your phone.
+- You want an assistant that keeps working (cron tasks, heartbeats, background
+  jobs) on a small box you own, and asks before risky steps.
+- You do not want a second agent stack: one binary, one SQLite file, pi does the rest.
+
+## Features
+
+- **Chat with any pi session**: streaming, thinking, tool steps, steer/follow-up
+  while it works, images and file upload, voice dictation, slash commands, ⌘K.
+- **Bots**: mark a session as long-lived, give it a name, persona and identicon.
+  Terminal and Pimu sessions share one list; a lock stops both writing at once.
+- **Tasks**: cron or manual runs inside a bot or a fresh session, with retries.
+- **Background jobs**: say "放到后台做" and the bot delegates via `pimu_task`;
+  the chat stays free and the result comes back with Pimu's own approval counts.
+- **Goals and inbox**: heartbeats with a zero-token precheck, notify / ask /
+  approval items, webhook triggers, Telegram notifications.
+- **Safety modes**: per bot `trusted` (native pi) or `guarded` (approval before
+  writes outside the project and non-read-only commands).
+- **Settings over pi's files**: models, extensions, skills, MCP, `AGENTS.md`.
+- **Browser**: Playwright MCP steps and screenshots in the Activity tab.
+
+| Chat with tool steps | Inline approval (guarded) | Job card with approval counts |
+|---|---|---|
+| ![chat](docs/screenshots/chat-tools-desktop.webp) | ![approval](docs/screenshots/inline-approval-desktop.webp) | ![jobs](docs/screenshots/job-approval-counts-desktop.webp) |
+
+## Quick start
+
+Requirements: Go ≥ 1.26 and Node ≥ 22 (build only), Linux or macOS.
 
 ```bash
-make build            # (cd web && npm ci && npm run build) && go build -o bin/pimu ./cmd/pimu
-make check            # gofmt + go vet + tsc
-make install-guard    # copy extensions/pimu-guard.ts to ~/.pi/agent/extensions/
-```
+# 1. pi (tested with 1.4.0); run it once and /login, or set up ~/.pi/agent/models.json
+npm i -g @earendil-works/pi-coding-agent
+pi
 
-`bin/pimu` is a single file with the UI embedded. Without `make`, run the two
-commands from the comment above.
+# 2. build Pimu: one binary with the UI embedded
+git clone https://github.com/0xNorex/pimu.git && cd pimu
+make build                      # = (cd web && npm ci && npm run build) && go build -o bin/pimu ./cmd/pimu
+make install-guard install-agent  # copy the two pi extensions to ~/.pi/agent/extensions/
 
-## Run
-
-```bash
-export PIMU_TOKEN=$(openssl rand -hex 32)   # ≥ 32 chars; this is your login password
+# 3. run
+export PIMU_TOKEN=$(openssl rand -hex 32)   # your login password, ≥ 32 chars
 ./bin/pimu serve                            # http://127.0.0.1:7777
 ```
 
-Open the URL, paste the token. On iPhone: Safari → Share → Add to Home Screen.
+Open the URL and paste the token. On iPhone: Safari → Share → Add to Home Screen.
+For an always-on box, see [Deploy](#deploy).
+
+## Configuration
 
 | env | default | |
 |---|---|---|
-| `PIMU_ADDR` | `127.0.0.1:7777` | keep loopback; expose via a tunnel |
-| `PIMU_TOKEN` | – | required |
+| `PIMU_TOKEN` | – | required, ≥ 32 chars |
+| `PIMU_ADDR` | `127.0.0.1:7777` | keep loopback; expose through a tunnel |
 | `PIMU_PUBLIC_URL` | – | e.g. `https://pimu.example.com`; enables Origin check + Secure cookie |
-| `PIMU_WORKDIRS` | `$HOME` | comma-separated dirs where sessions and tasks may run |
-| `PIMU_PI_BIN` / `PIMU_PI_ARGS` | `pi` / – | extra args passed to every `pi --mode rpc` |
+| `PIMU_WORKDIRS` | `$HOME` | comma-separated dirs where sessions may run |
+| `PIMU_DATA_DIR` | `~/.local/share/pimu` | `pimu.db` and per-bot data |
+| `PIMU_MAX_PROCS` | `3` | concurrent pi processes (≈120 MB each) |
+| `PIMU_MAX_JOBS` | `1` | background jobs at once; the rest queue |
 | `PIMU_IDLE_TIMEOUT` | `10m` | idle pi processes are stopped |
-| `PIMU_MAX_PROCS` | `3` | concurrent pi processes |
+| `PIMU_PI_BIN` / `PIMU_PI_ARGS` | `pi` / – | pi binary and extra args |
+| `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → notifications via Telegram |
 | `PIMU_LOG_LEVEL` | `info` | `debug` also logs pi stderr |
-| `PIMU_DATA_DIR` | `~/.local/share/pimu` | holds `pimu.db` (tasks + runs only) |
-| `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → task run, goal and job notifications via Bot API |
-| `PIMU_MAX_JOBS` | `1` | background jobs running at once; the rest queue |
+| `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi's own config dir, honoured as pi does |
 
-## Sessions and bots
+## Architecture
 
-Sessions come first. **+** always opens a new pi session (pick a directory when
-`PIMU_WORKDIRS` lists several); there is no "new bot" form. A bot is just a
-session you marked as long-lived: open any session → 菜单 → **设为 Bot** (name
-optional, defaults to the session title or first message; avatar is an
-identicon of the session id). **取消 Bot** drops only the bot metadata (name,
-persona, goals); the pi session file and the conversation stay.
-
-Home list: bots pinned on top (busy, then unread, then newest), then every
-other session expanded and grouped by working directory (`~/proj/x` headers),
-including sessions you started with `pi` in a terminal (marked with a terminal
-icon). Task runs (`pimu-t*`), heartbeats (`pimu-g*`) and background jobs
-(`pimu-j*`) are hidden there and shown under their task, goal or bot. Session ids stay in 详情, not in the list.
-
-The conversation, model, thinking level and system prompt live in pi's session
-file. Pimu's SQLite `bots` table keeps only what pi cannot: name, one-line
-description, persona text, cwd, archived.
-
-### Where things live
-
-| What | Path |
-|---|---|
-| pi sessions (Pimu's and the terminal's) | `~/.pi/agent/sessions/<cwd-encoded>/*.jsonl` |
-| pi settings, models, MCP, extensions | `~/.pi/agent/` |
-| Pimu database (bots, tasks, runs, goals, inbox, beats) | `~/.local/share/pimu/pimu.db` (`PIMU_DATA_DIR`) |
-| per-bot data: `MEMORY.md`, `goals/<slug>/{GOAL,STATE,findings}.md`, `log/` | `~/.local/share/pimu/bots/<session-id>/` |
-| uploads from the composer | `<cwd>/.pimu/uploads/<session>/` |
-| session locks shared with terminal pi | `~/.pi/agent/locks/` |
-
-- Persona is passed as `--append-system-prompt` every time pi starts for that
-  session; pi records it as a system section in the session file. Editing the
-  persona releases an idle process so the next message uses the new one.
-- Name goes to pi as `--name` (and `set_session_name` when running).
-- Long chats rely on pi's own auto-compaction (on by default; see pi
-  `docs/compaction.md`). Pimu adds nothing.
-- Composer: 📎 images go to the model as prompt images (if pi's model entry lacks
-  `"image"` in `input`, pi drops them and the UI warns). Other files are uploaded (≤25 MB, sanitized names) to
-  `<cwd>/.pimu/uploads/<session>/` and their path is added to the message, so pi
-  reads them with its own tools. Paste and drag-drop work too. 🎤 uses the
-  browser Web Speech API (zh-CN); the button is hidden where unsupported.
-- Slash: pi's built-in commands are TUI-only (docs/SLASH.md), so the composer
-  handles `/compact [指示]`, `/model [p/m]`, `/thinking [lvl]`, `/name x`,
-  `/session`, `/export`, `/copy`, `/new`, `/resume`, `/settings`, `/reload`
-  itself (`/fork` and `/clone` point to the terminal). Everything else
-  (extension commands, `/skill:*`, prompt templates) goes to pi unchanged. The
-  autocomplete labels each command's source.
-
-## Tasks
-
-任务 (`#/tasks`) runs a prompt inside a bot (its output lands in that bot's chat
-and its 任务 tab; skipped as failed while the bot is replying) or in a fresh pi
-session (`pimu-t<task>-r<run>`) on a
-5-field cron schedule (server local time) or on 立即运行. Each run records
-status, the last assistant text as summary, and links to its session.
-A failed run is retried after 1 minute up to `maxRetries` extra times; runs cut
-off by a Pimu restart are marked `interrupted: pimu restarted` and retried the
-same way. Missed cron slots while Pimu was down are not backfilled.
-
-## Autonomy: goals, inbox, background jobs
-
-Design and limits: docs/AUTONOMY.md. Needs the agent extension once:
-`make install-agent` (copies `extensions/pimu-agent.ts` to
-`~/.pi/agent/extensions/`; it does nothing in sessions without Pimu's env).
-
-- **Goals** (bot → 目标) attach only to bots. Each has a `GOAL.md`, an interval
-  and active hours. A zero-token precheck (enabled, active hours, due time or a
-  pending event such as a webhook or an answer, limits) decides whether a beat
-  is needed; each beat is a fresh pi session
-  (`pimu-g<goal>-b<beat>`) that reads GOAL/STATE/findings and ends with a
-  ```` ```pimu ```` action block: `noop`, `notify`, `ask`, `task`, `state`,
-  `finding`. Notify is for important things only and is deduplicated.
-  Webhook: `POST /api/goals/{id}/hook?k=…` (key shown masked in the UI).
-- **Gate** (pimu-agent.ts): L1 = read-only tools plus writes inside the bot
-  directory; L2 = anything else needs approval in the inbox. Approval is for
-  one exact call (hash of tool + args), used once. Secret paths are always
-  blocked.
-- **Hard limits**: at most 6 beats/hour, a token budget per goal per day, wall
-  time per beat; three failed beats in a row disable the goal (and notify).
-  The checkpoint between beats is `STATE.md` (≤4 KB, rewritten by the `state`
-  action); every beat is also appended to the bot's `log/<date>.md`.
-- **Inbox** (🔔 on home, or inside the bot's 目标 tab): notify / ask /
-  approval items with 已读, 批准一次, 拒绝, 回答.
-- **Background jobs** (bot → 任务): in a bot's chat say "放到后台做". The bot
-  calls the `pimu_task` tool; Pimu starts an independent pi session
-  (`pimu-j<id>`, same models, MCP and extensions, the bot's cwd, gate level
-  L2) and the chat stays free. States: queued, running, waiting_approval,
-  completed, failed, cancelled, interrupted, stored in SQLite.
-  `PIMU_MAX_JOBS` run at once. When a job ends, its result is sent to the bot's
-  main session as a follow-up and to the inbox. You can cancel a job, or steer
-  a running one with an extra instruction. Jobs cut off by a restart are marked
-  interrupted and never rerun on their own; you choose 重新运行 or 丢弃.
-
-## Settings
-
-The settings page (`#/settings`, ⌘K jumps there too) is a view onto pi's own files. Pimu does not keep a copy of any of them.
-
-- **模型**: picks the default model and thinking level (`settings.json`: `defaultProvider`, `defaultModel`, `modelThinkingLevels`). Providers from `models.json` are read-only, and API keys and `!command` keys are masked.
-- **扩展**: toggles the built-in extensions (`-builtin:<name>` in `settings.extensions`). Lists the files in `~/.pi/agent/extensions/`, packages, and the commands extensions register.
-- **Skills**: shows skills and prompt templates as pi discovers them (`get_commands`). You can read each one's file.
-- **MCP**: lists the servers in `~/.pi/agent/mcp.json` with an `enabled` switch. 检测连接 runs `pi mcp list --json`. Env and header values are never sent to the browser.
-- **记忆**: edits the global `~/.pi/agent/AGENTS.md`. `#/memory` redirects here.
-- **Pimu**: theme (system/light/dark), Telegram status, versions, logout.
-
-Writes are small read-modify-write edits through temp file + rename. They carry the file's mtime, so an edit made elsewhere gives a 409 instead of being overwritten. Changes apply to new sessions.
-
-## Browser (optional)
-
-Pimu does not drive a browser itself. Give pi the Playwright MCP server and
-the Activity tab shows its calls (filter 浏览器操作) with screenshots inline.
-`~/.pi/agent/mcp.json` (needs pi's MCP support and Chrome/Chromium):
-
-```json
-{
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["-y", "@playwright/mcp@0.0.83", "--headless", "--isolated", "--browser", "chrome",
-               "--no-sandbox", "--image-responses", "allow", "--output-dir", "/tmp/pimu-pw-out"],
-      "exposure": "direct"
-    }
-  }
-}
+```mermaid
+flowchart LR
+  B["Browser / iPhone PWA"] -- "HTTPS + SSE" --> S["pimu (Go)"]
+  S -- "JSONL over stdio" --> P1["pi --mode rpc<br/>chat session"]
+  S --> P2["pi --mode rpc<br/>job / task / heartbeat"]
+  S <--> DB[("SQLite<br/>bots, tasks, goals, jobs, inbox")]
+  P1 & P2 --> X["pimu-agent.ts<br/>gate, pimu_task"]
+  X -- "scoped capability" --> S
+  P1 & P2 <--> F["~/.pi/agent<br/>sessions, models, MCP"]
+  S -. "read only" .-> F
 ```
 
-`--image-responses allow` is required for screenshots to come back as images.
-When the model passes a `filename`, Playwright only saves the file and returns
-text, so nothing renders.
+Pimu never edits pi's session files; it reads them for the list and history and
+drives pi only through its RPC mode. Children get a per-session capability, never
+the server token.
 
-## Terminal and Pimu on the same session
+```
+cmd/pimu/          main: serve, release
+internal/hub/      pi process pool, SSE streams and replay
+internal/pirpc/    pi RPC client
+internal/httpapi/  REST + SSE API, auth, embedded static files
+internal/store/    SQLite: bots, tasks, goals, jobs, inbox, approvals
+internal/jobs/     background jobs (pimu_task)
+internal/goals/    heartbeats and actions
+internal/tasks/    cron tasks
+internal/sessions/ read-only index of pi session files
+internal/caps/     per-session capability tokens
+extensions/        pimu-agent.ts (gate, pimu_task), pimu-guard.ts (terminal lock)
+web/               React + Vite PWA (embedded into the binary)
+docs/              GUIDE, DESIGN, AUTONOMY, SLASH, HISTORY, screenshots
+```
 
-Pimu holds `~/.pi/agent/locks/<id>.lock` while its pi runs a session. With the
-guard extension installed, a terminal `pi --session <id>` refuses to open a
-session Pimu holds. Hand it over with `pimu release <id>` (or 交给终端 in the
-UI menu); while the terminal holds it, Pimu shows the session read-only and
-prompts return 409.
+## Safety model
 
-## Deploy (systemd + cloudflared)
+- **trusted** (default): the bot's main chat is native pi, exactly as in a terminal.
+- **guarded**: the same L2 gate as background jobs. Read-only tools and a strict
+  read-only bash allowlist pass; writes outside the project, other commands and
+  MCP tools without `readOnlyHint` wait for your approval (inline in the chat and
+  in the inbox). An approval covers one exact call (tool + args hash), is used
+  once and expires. `pimu_task` delegation keeps working.
+- Jobs and heartbeats always run gated; dangerous commands are blocked there.
+  Secret paths, `/proc` and other bots' data are blocked everywhere.
+- Switching mode applies at once to an idle bot, otherwise at its next start.
+- **Neither mode is an OS sandbox.** The gate is app-level; pi runs with your
+  user's permissions. Run Pimu as a dedicated user if that matters to you.
+
+## Deploy
 
 ```bash
-make install install-guard
+make install install-guard install-agent
 mkdir -p ~/.config/pimu && printf 'PIMU_TOKEN=%s\nPIMU_PUBLIC_URL=https://pimu.example.com\n' "$(openssl rand -hex 32)" > ~/.config/pimu/env
 chmod 600 ~/.config/pimu/env
 cp deploy/pimu.service ~/.config/systemd/user/ && systemctl --user enable --now pimu
 loginctl enable-linger "$USER"
 ```
 
-cloudflared: `cloudflared tunnel create pimu`, ingress `pimu.example.com →
-http://127.0.0.1:7777`, and a Zero Trust Access app on that hostname allowing
-only your email.
+Expose it through a tunnel (e.g. `cloudflared tunnel create pimu`, ingress
+`pimu.example.com → http://127.0.0.1:7777`, plus an access policy for your email).
+A 2 vCPU / 3 GB VPS runs Pimu (~16 MB) and three pi processes comfortably.
+
+## Limitations
+
+- Single user, single machine. No multi-user accounts, no cloud VM.
+- pi's TUI-only commands (`/fork`, `/clone`) stay in the terminal.
+- Missed cron slots while Pimu is down are not backfilled.
+- Not verified by hand yet: iPhone Safari voice input, Telegram delivery,
+  systemd + cloudflared on a fresh VPS.
+
+## Docs
+
+[GUIDE](docs/GUIDE.md) (full usage reference) · [DESIGN](docs/DESIGN.md) ·
+[AUTONOMY](docs/AUTONOMY.md) · [SLASH](docs/SLASH.md) · [HISTORY](docs/HISTORY.md)
