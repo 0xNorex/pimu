@@ -75,7 +75,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
-			if !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
+			// JSON (or, for uploads, a custom header) forces a CORS preflight,
+			// so a cross-site form cannot post with the session cookie.
+			upload := strings.HasSuffix(r.URL.Path, "/files") && r.Header.Get("X-Pimu-Upload") == "1"
+			if !upload && !strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 				writeErr(w, http.StatusUnsupportedMediaType, "json_required", "需要 Content-Type: application/json")
 				return
 			}
