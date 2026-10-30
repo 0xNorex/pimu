@@ -103,11 +103,18 @@ func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 	b.SessionID = hub.NewID()
 	if body.Adopt != "" {
 		info, ok := s.hub.Idx.Find(body.Adopt)
-		if !ok {
-			writeErr(w, 404, "not_found", "会话不存在")
-			return
+		if !ok { // a new Pimu session that has no file yet
+			cwd, known := s.hub.Known()[body.Adopt]
+			if !known {
+				writeErr(w, 404, "not_found", "会话不存在")
+				return
+			}
+			info.ID, info.Cwd = body.Adopt, cwd
 		}
 		b.SessionID, b.Cwd = info.ID, info.Cwd
+		if strings.TrimSpace(b.Name) == "" { // default: the session's title or first message
+			b.Name = strings.TrimSpace(clipRunes(firstNonEmpty(info.Name, info.Preview), 20))
+		}
 	}
 	if strings.TrimSpace(b.Name) == "" { // nothing to fill in: auto-name
 		n := 1
@@ -130,6 +137,36 @@ func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"bot": s.botOut(b, s.infos())})
+}
+
+// handleBotDelete unsets a bot: the pi session and its files stay, only the
+// bot metadata (name, persona, goals) is dropped.
+func (s *Server) handleBotDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if err := s.st.DeleteBot(id); err != nil {
+		s.botErr(w, err)
+		return
+	}
+	if run := s.hub.Running(id); run != nil && !run.Streaming() {
+		s.hub.Release(r.Context(), id) // drop the persona on next start
+	}
+	writeJSON(w, 200, map[string]bool{"ok": true})
+}
+
+func clipRunes(s string, n int) string {
+	if r := []rune(s); len(r) > n {
+		return string(r[:n])
+	}
+	return s
+}
+
+func firstNonEmpty(a ...string) string {
+	for _, s := range a {
+		if strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
 }
 
 // handleBotPatch overlays the body. A new name reaches pi now if it is running

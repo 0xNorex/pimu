@@ -46,15 +46,35 @@ Open the URL, paste the token. On iPhone: Safari → Share → Add to Home Scree
 | `PIMU_DATA_DIR` | `~/.local/share/pimu` | holds `pimu.db` (tasks + runs only) |
 | `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → task run notifications via Bot API |
 
-## Bots
+## Sessions and bots
 
-The home screen is a list of bots, like a messaging app of your assistants.
-A bot **is** a pi session: the conversation, model, thinking level and system
-prompt live in pi's session file. Pimu's SQLite `bots` table keeps only what pi
-cannot: one-line description, persona text, cwd, archived (and the name,
-because pi does not write a session file until the first message). Avatars are
-GitHub-style identicons derived from the session id. Creating a bot needs at
-most a name (empty → 助手 N); persona etc. are edited later.
+Sessions come first. **+** always opens a new pi session (pick a directory when
+`PIMU_WORKDIRS` lists several); there is no "new bot" form. A bot is just a
+session you marked as long-lived: open any session → 菜单 → **设为 Bot** (name
+optional, defaults to the session title or first message; avatar is an
+identicon of the session id). **取消 Bot** drops only the bot metadata (name,
+persona, goals); the pi session file and the conversation stay.
+
+Home list: bots pinned on top (busy, then unread, then newest), then every
+other session expanded and grouped by working directory (`~/proj/x` headers),
+including sessions you started with `pi` in a terminal (marked with a terminal
+icon). Task runs (`pimu-t*`) and heartbeats (`pimu-g*`) are hidden there and
+shown under their task or goal. Session ids stay in 详情, not in the list.
+
+The conversation, model, thinking level and system prompt live in pi's session
+file. Pimu's SQLite `bots` table keeps only what pi cannot: name, one-line
+description, persona text, cwd, archived.
+
+### Where things live
+
+| What | Path |
+|---|---|
+| pi sessions (Pimu's and the terminal's) | `~/.pi/agent/sessions/<cwd-encoded>/*.jsonl` |
+| pi settings, models, MCP, extensions | `~/.pi/agent/` |
+| Pimu database (bots, tasks, runs, goals, inbox, beats) | `~/.local/share/pimu/pimu.db` (`PIMU_DATA_DIR`) |
+| per-bot data: `MEMORY.md`, `goals/<slug>/{GOAL,STATE,findings}.md`, `log/` | `~/.local/share/pimu/bots/<session-id>/` |
+| uploads from the composer | `<cwd>/.pimu/uploads/<session>/` |
+| session locks shared with terminal pi | `~/.pi/agent/locks/` |
 
 - Persona is passed as `--append-system-prompt` every time pi starts for that
   session; pi records it as a system section in the session file. Editing the
@@ -62,8 +82,6 @@ most a name (empty → 助手 N); persona etc. are edited later.
 - Name goes to pi as `--name` (and `set_session_name` when running).
 - Long chats rely on pi's own auto-compaction (on by default; see pi
   `docs/compaction.md`). Pimu adds nothing.
-- Raw pi sessions that are not bots sit under 其他会话 and can be adopted
-  (菜单 → 设为 Bot). Task-run sessions (`pimu-t*`) are hidden from the home list.
 - Composer: 📎 images go to the model as prompt images (if pi's model entry lacks
   `"image"` in `input`, pi drops them and the UI warns). Other files are uploaded (≤25 MB, sanitized names) to
   `<cwd>/.pimu/uploads/<session>/` and their path is added to the message, so pi

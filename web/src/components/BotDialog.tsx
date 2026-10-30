@@ -8,14 +8,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
-import { go } from '@/lib/route'
 import type { Bot } from '@/lib/types'
 
 type Props = {
   open: boolean
   onOpenChange: (o: boolean) => void
   bot?: Bot // edit
-  adopt?: { id: string; name?: string } // turn an existing session into a bot
+  adopt?: { id: string; name?: string } // set an existing session as a bot (there is no "new bot": new means new session)
   onSaved?: (b: Bot) => void
 }
 
@@ -27,7 +26,7 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
 
   useEffect(() => {
     if (!open) return
-    setF(bot ? { name: bot.name, description: bot.description, persona: bot.persona, cwd: bot.cwd } : { name: adopt?.name ?? '', description: '', persona: '', cwd: '' })
+    setF(bot ? { name: bot.name, description: bot.description, persona: bot.persona, cwd: bot.cwd } : { name: '', description: '', persona: '', cwd: '' })
     api<{ workdirs: string[] }>('/api/workdirs').then((r) => setWorkdirs(r.workdirs)).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bot, adopt?.id, adopt?.name])
@@ -40,7 +39,7 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
         : await api<{ bot: Bot }>('/api/bots', { ...f, sessionId: adopt?.id })
       onOpenChange(false)
       onSaved?.(r.bot)
-      if (!bot && !adopt) go(`#/s/${r.bot.id}`)
+      if (!bot) toast.success(`已设为 Bot「${r.bot.name}」`, { description: '会置顶在首页；会话和对话原样保留。' })
       if (patch?.archived !== undefined) toast.success(patch.archived ? '已归档' : '已恢复')
     } catch (e) {
       toast.error(errMsg(e))
@@ -53,8 +52,8 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{bot ? '编辑 Bot' : adopt ? '设为 Bot' : '新建 Bot'}</DialogTitle>
-          <DialogDescription>{bot ? '人设修改后从下一条消息起生效。' : '起个名字就行，留空自动命名。人设等以后点头像再改。'}</DialogDescription>
+          <DialogTitle>{bot ? '编辑 Bot' : '设为 Bot'}</DialogTitle>
+          <DialogDescription>{bot ? '人设修改后从下一条消息起生效。' : 'Bot 就是一个长期的会话：置顶、有头像，可以加人设和后台目标。名字可留空，默认用会话标题。'}</DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4"
@@ -65,7 +64,7 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
         >
           <div className="grid gap-2">
             <Label htmlFor="bot-name">名字</Label>
-            <Input id="bot-name" value={f.name} onChange={(e) => set('name', e.target.value)} placeholder={bot ? '' : '留空自动命名，例如：翻译官'} className="min-h-11 text-base" maxLength={40} autoFocus={!bot} />
+            <Input id="bot-name" value={f.name} onChange={(e) => set('name', e.target.value)} placeholder={bot ? '' : adopt?.name || '留空自动命名'} className="min-h-11 text-base" maxLength={40} autoFocus={!bot} />
           </div>
           {bot && (
             <>
@@ -102,7 +101,7 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
               </Button>
             )}
             <Button type="submit" className="min-h-11" disabled={busy || (!!bot && !f.name.trim())}>
-              {bot ? '保存' : '开始聊天'}
+              {bot ? '保存' : '设为 Bot'}
             </Button>
           </DialogFooter>
         </form>

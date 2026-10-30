@@ -336,3 +336,15 @@ func (s *Store) UpdateBot(b Bot) (Bot, error) {
 	}
 	return s.Bot(b.SessionID)
 }
+
+// DeleteBot drops the bot metadata only; the pi session file is untouched.
+func (s *Store) DeleteBot(id string) error {
+	res, err := s.db.Exec(`DELETE FROM bots WHERE session_id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}

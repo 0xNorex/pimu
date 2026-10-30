@@ -4,7 +4,8 @@ import { ArrowDownIcon, ChevronLeftIcon, EllipsisVerticalIcon, RotateCcwIcon } f
 import { haptic } from '@/lib/theme'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { api, errMsg } from '@/lib/api'
@@ -42,6 +43,7 @@ export function ChatView({ id }: { id: string }) {
   const [settings, setSettings] = useState(false)
   const [info, setInfo] = useState(false)
   const [editBot, setEditBot] = useState(false)
+  const [unset, setUnset] = useState(false)
   const [bot, setBot] = useState<Bot | null>(null)
   const [visionOk, setVisionOk] = useState(true)
   const [atBottom, setAtBottom] = useState(true)
@@ -137,6 +139,15 @@ export function ChatView({ id }: { id: string }) {
     setAtBottom(false)
     requestAnimationFrame(() => document.getElementById(`tool-${toolCallId}`)?.scrollIntoView({ block: 'center' }))
   }
+  const unsetBot = async () => {
+    try {
+      await api(`/api/bots/${id}`, {}, 'DELETE')
+      setBot(null)
+      toast.success('已取消 Bot', { description: '会话和对话都还在，回到按目录分组的会话列表里。' })
+    } catch (e) {
+      toast.error(errMsg(e))
+    }
+  }
   const lastUser = [...s.messages].reverse().find((m) => m.role === 'user')
 
   const title = bot?.name || detail?.state?.sessionName || detail?.name || '对话'
@@ -169,6 +180,12 @@ export function ChatView({ id }: { id: string }) {
               模型与思考强度
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setInfo(true)}>详情</DropdownMenuItem>
+            {bot && (
+              <>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setUnset(true)}>取消 Bot（保留会话）</DropdownMenuItem>
+              </>
+            )}
           </DropdownMenuContent>
         </DropdownMenu>
       </header>
@@ -232,6 +249,20 @@ export function ChatView({ id }: { id: string }) {
       <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onAbort={abort} />
       {s.uiRequests[0] && <ExtensionDialog key={s.uiRequests[0].id} req={s.uiRequests[0]} onReply={reply(s.uiRequests[0].id)} />}
       <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot ?? undefined} adopt={bot ? undefined : { id, name: detail?.state?.sessionName || detail?.name }} onSaved={setBot} />
+      <AlertDialog open={unset} onOpenChange={setUnset}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>取消「{bot?.name}」的 Bot 身份？</AlertDialogTitle>
+            <AlertDialogDescription>只去掉名字、人设和后台目标；会话、对话和文件都保留，之后随时可以再设为 Bot。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="min-h-11">算了</AlertDialogCancel>
+            <AlertDialogAction className="min-h-11" onClick={() => void unsetBot()}>
+              取消 Bot
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <Sheet open={info} onOpenChange={setInfo}>
         <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto pb-[max(env(safe-area-inset-bottom),16px)]">
           <SheetHeader>

@@ -31,7 +31,7 @@ export default function App() {
             <BotList activeId={activeId} route={route.name} />
           </aside>
           {page ?? (
-            <main className="hidden flex-1 items-center justify-center text-sm text-muted-foreground lg:flex">选一个 Bot 开始聊天</main>
+            <main className="hidden flex-1 items-center justify-center text-sm text-muted-foreground lg:flex">选一个会话，或点 + 开个新的</main>
           )}
         </>
       )}

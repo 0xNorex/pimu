@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -41,7 +42,8 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("POST /api/login", s.handleLogin)
 	api.HandleFunc("POST /api/logout", s.handleLogout)
 	api.HandleFunc("GET /api/workdirs", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, 200, map[string]any{"workdirs": s.cfg.Workdirs})
+		home, _ := os.UserHomeDir()
+		writeJSON(w, 200, map[string]any{"workdirs": s.cfg.Workdirs, "home": home})
 	})
 	api.HandleFunc("GET /api/models", s.handleModels)
 	api.HandleFunc("GET /api/sessions", s.handleList)
@@ -61,6 +63,7 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("POST /api/bots", s.handleBotCreate)
 	api.HandleFunc("GET /api/bots/{id}", s.handleBotGet)
 	api.HandleFunc("PATCH /api/bots/{id}", s.handleBotPatch)
+	api.HandleFunc("DELETE /api/bots/{id}", s.handleBotDelete)
 	api.HandleFunc("POST /api/sessions/{id}/files", s.handleUpload)
 	api.HandleFunc("GET /api/events", s.handleGlobalEvents)
 	api.HandleFunc("GET /api/tasks", s.handleTaskList)

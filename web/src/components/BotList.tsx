@@ -1,25 +1,41 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
-import { CalendarClockIcon, ChevronRightIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, SparklesIcon, TerminalIcon } from 'lucide-react'
+import { CalendarClockIcon, ChevronRightIcon, FolderIcon, Loader2Icon, PlusIcon, SearchIcon, SettingsIcon, SparklesIcon, TerminalIcon } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
-import { api } from '@/lib/api'
+import { api, errMsg } from '@/lib/api'
 import { fmtShort } from '@/lib/format'
-import type { Route } from '@/lib/route'
+import { go, type Route } from '@/lib/route'
 import { isUnread } from '@/lib/seen'
 import type { Bot, SessionSummary, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { BotAvatar } from './BotAvatar'
-import { BotDialog } from './BotDialog'
 
 function greeting() {
   const h = new Date().getHours()
   return h < 5 ? '夜深了' : h < 11 ? '早上好' : h < 13 ? '中午好' : h < 18 ? '下午好' : '晚上好'
 }
 
-const isTaskRun = (id: string) => id.startsWith('pimu-t')
+// Task runs (pimu-t…) and heartbeats (pimu-g…) live under their task/goal, not here.
+const isBackground = (id: string) => /^pimu-[tg]\d/.test(id)
+// "/home/me/proj/x" -> "~/proj/x"
+export const shortPath = (p: string, home: string) => (home && (p === home || p.startsWith(home + '/')) ? '~' + p.slice(home.length) : p)
+
+// Creating always means a new session; any session can later be set as a bot.
+export async function newSession(cwd?: string) {
+  const t = toast.loading('正在开新会话…')
+  try {
+    const r = await api<{ id: string }>('/api/sessions', { cwd: cwd ?? '' })
+    toast.dismiss(t)
+    go(`#/s/${r.id}`)
+  } catch (e) {
+    toast.error(errMsg(e), { id: t })
+  }
+}
 // Previews are raw markdown; drop the syntax characters.
 const plain = (t: string) => t.replace(/[*_`#>]+/g, '').replace(/^\s*[-+]\s+/, '').replace(/\s+/g, ' ').trim()
 
@@ -28,7 +44,8 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   const [sessions, setSessions] = useState<SessionSummary[]>([])
   const [runs, setRuns] = useState<TaskRun[]>([])
   const [q, setQ] = useState('')
-  const [newOpen, setNewOpen] = useState(false)
+  const [dirs, setDirs] = useState<{ workdirs: string[]; home: string }>({ workdirs: [], home: '' })
+  const [more, setMore] = useState<Record<string, boolean>>({})
 
   // Animate reorders (a bot jumping to the top) with View Transitions where supported.
   const order = useRef('')
@@ -47,6 +64,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   }
   useEffect(() => {
     load()
+    api<{ workdirs: string[]; home: string }>('/api/workdirs').then(setDirs).catch(() => {})
     const t = setInterval(() => document.visibilityState === 'visible' && load(), 5000)
     return () => clearInterval(t)
   }, [])
@@ -64,7 +82,18 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
     return [list.filter((b) => !b.archived), list.filter((b) => b.archived)]
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bots, ql, activeId])
-  const others = sessions.filter((s) => !byId.has(s.id) && !isTaskRun(s.id) && match(s.name, s.preview))
+  // Every other session, grouped by working directory (newest group first).
+  const groups = useMemo(() => {
+    const m = new Map<string, SessionSummary[]>()
+    for (const s of sessions) {
+      if (byId.has(s.id) || isBackground(s.id) || !match(s.name, s.preview, s.cwd)) continue
+      m.set(s.cwd, [...(m.get(s.cwd) ?? []), s])
+    }
+    const out = [...m.entries()].map(([cwd, list]) => ({ cwd, list: list.sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)) }))
+    return out.sort((a, b) => Date.parse(b.list[0].updatedAt) - Date.parse(a.list[0].updatedAt))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessions, byId, ql])
+  const PAGE = 8
 
   const row = (b: Bot) => {
     const unread = b.id !== activeId && b.lastRole === 'assistant' && isUnread(b.id, b.updatedAt)
@@ -128,9 +157,27 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
             <SettingsIcon />
           </a>
         </Button>
-        <Button size="icon" className="size-11 rounded-full shadow-soft" aria-label="新建 Bot" title="新建 Bot" onClick={() => setNewOpen(true)}>
-          <PlusIcon />
-        </Button>
+        {dirs.workdirs.length > 1 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" className="size-11 rounded-full shadow-soft" aria-label="新会话" title="新会话">
+                <PlusIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel className="text-xs text-muted-foreground">新会话，在哪个目录？</DropdownMenuLabel>
+              {dirs.workdirs.map((d) => (
+                <DropdownMenuItem key={d} className="min-h-11 font-mono text-xs" onSelect={() => void newSession(d)}>
+                  <FolderIcon /> {shortPath(d, dirs.home)}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <Button size="icon" className="size-11 rounded-full shadow-soft" aria-label="新会话" title="新会话" onClick={() => void newSession()}>
+            <PlusIcon />
+          </Button>
+        )}
       </header>
       <div className="relative px-4 pt-1 pb-3">
         <SearchIcon className="pointer-events-none absolute top-1/2 left-7 size-4 -translate-y-[calc(50%-2px)] text-muted-foreground" />
@@ -157,32 +204,59 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           </section>
         )}
         {!bots && <div className="space-y-2 px-3">{[0, 1, 2].map((i) => <Skeleton key={i} className="h-16" />)}</div>}
-        {bots && active.length === 0 && !ql && (
+        {bots && active.length === 0 && groups.length === 0 && !ql && (
           <div className="p-8 text-center text-sm text-muted-foreground">
             <SparklesIcon className="mx-auto size-8 text-primary" />
-            <p className="mt-3">还没有 Bot。给每件事一个专属助手。</p>
-            <Button className="mt-4 min-h-11" onClick={() => setNewOpen(true)}>
-              <PlusIcon /> 新建 Bot
+            <p className="mt-3">开个会话聊起来；常用的会话可以“设为 Bot”，置顶在这里。</p>
+            <Button className="mt-4 min-h-11" onClick={() => void newSession()}>
+              <PlusIcon /> 新会话
             </Button>
           </div>
         )}
-        {active.map(row)}
-        <div className="mx-4 mt-3 border-t pt-1">
-          {fold(
-            '终端会话',
-            others.length,
-            others.map((s) => (
-              <a key={s.id} href={`#/s/${s.id}`} title="在终端用 pi 开的会话；打开后可“设为 Bot”" className={`-mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2 py-2 hover:bg-foreground/[0.04] ${s.id === activeId ? 'bg-accent' : ''}`}>
-                <TerminalIcon className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate text-sm">{s.name || s.preview || '（空会话）'}</span>
-                <span className="shrink-0 text-xs text-muted-foreground">{fmtShort(s.updatedAt)}</span>
-              </a>
-            )),
-          )}
-          {fold('已归档', archived.length, <div className="-mx-4">{archived.map(row)}</div>)}
-        </div>
+        {active.length > 0 && (
+          <section aria-label="Bot">
+            <h2 className="px-4 pb-1 text-xs font-medium text-muted-foreground">Bot</h2>
+            {active.map(row)}
+          </section>
+        )}
+        {groups.map((g) => {
+          const shown = more[g.cwd] ? g.list : g.list.slice(0, PAGE)
+          return (
+            <section key={g.cwd} aria-label={shortPath(g.cwd, dirs.home)} className="mt-3">
+              <h2 className="flex items-center gap-1.5 px-4 pb-1 text-xs text-muted-foreground" title={g.cwd}>
+                <FolderIcon className="size-3.5 shrink-0" />
+                <span className="min-w-0 flex-1 truncate font-mono">{shortPath(g.cwd, dirs.home)}</span>
+                <span className="tabular-nums">{g.list.length}</span>
+              </h2>
+              {shown.map((s) => (
+                <a
+                  key={s.id}
+                  href={`#/s/${s.id}`}
+                  aria-current={s.id === activeId ? 'page' : undefined}
+                  title={s.id.startsWith('pm-') ? undefined : '在终端用 pi 开的会话'}
+                  className="pressable mx-2 flex min-h-11 items-center gap-3 rounded-lg px-2.5 py-2 hover:bg-foreground/[0.04] aria-[current=page]:bg-accent"
+                >
+                  {s.status === 'streaming' ? (
+                    <Loader2Icon className="size-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" aria-label="运行中" />
+                  ) : s.id.startsWith('pm-') ? (
+                    <span className="size-4 shrink-0" aria-hidden />
+                  ) : (
+                    <TerminalIcon className="size-4 shrink-0 text-muted-foreground" aria-label="终端会话" />
+                  )}
+                  <span className="min-w-0 flex-1 truncate text-sm">{s.name || (s.preview ? plain(s.preview) : '新会话')}</span>
+                  <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{fmtShort(s.updatedAt)}</span>
+                </a>
+              ))}
+              {g.list.length > PAGE && !more[g.cwd] && (
+                <button type="button" className="mx-4 min-h-9 text-xs text-primary" onClick={() => setMore((m) => ({ ...m, [g.cwd]: true }))}>
+                  再显示 {g.list.length - PAGE} 个
+                </button>
+              )}
+            </section>
+          )
+        })}
+        <div className="mx-4 mt-3 border-t pt-1">{fold('已归档 Bot', archived.length, <div className="-mx-4">{archived.map(row)}</div>)}</div>
       </nav>
-      <BotDialog open={newOpen} onOpenChange={setNewOpen} />
     </div>
   )
 }
