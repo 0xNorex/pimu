@@ -5,8 +5,9 @@ V1 (Chat + RPC) built, 2026-10-30.
 - Done: Go server (pi RPC proc, lock, SSE + replay, token/cookie auth, idle reaper,
   `pimu release`), embedded PWA (list, chat stream, tools, steer/followUp/abort,
   model/thinking, `/` commands, extension dialogs, Activity tab), pimu-guard extension.
-- Verified on box with pi 1.4.0 + a local stub model (no real API key).
-- Not verified: iPhone Safari manual checks, real-model runs, systemd/cloudflared,
+- Verified on box with pi 1.4.0: stub model, then a real OpenAI-compatible model
+  (streaming, thinking, tools, steer, abort).
+- Not verified: iPhone Safari manual checks, systemd/cloudflared,
   `make` itself (no make on build box; commands run by hand).
 - Known gaps: guard in `pi --mode rpc` only flags shutdown (pi limitation);
   pi may write metadata before extensions run (pi#8300); no tests by choice.
