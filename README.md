@@ -61,7 +61,7 @@ export PIMU_TOKEN=$(openssl rand -hex 32)   # your login password, ≥ 32 chars
 ```
 
 Open the URL and paste the token. On iPhone: Safari → Share → Add to Home Screen.
-For an always-on box, see [Deploy](#deploy).
+For an always-on box, see [Deploy](#deploy) and [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Configuration
 
@@ -76,6 +76,8 @@ For an always-on box, see [Deploy](#deploy).
 | `PIMU_MAX_JOBS` | `1` | background jobs at once; the rest queue |
 | `PIMU_IDLE_TIMEOUT` | `10m` | idle pi processes are stopped |
 | `PIMU_PI_BIN` / `PIMU_PI_ARGS` | `pi` / – | pi binary and extra args |
+| `PIMU_CF_ACCESS_TEAM` / `PIMU_CF_ACCESS_AUD` | – | both set → every request needs a valid Cloudflare Access JWT ([DEPLOY](docs/DEPLOY.md)) |
+| `PIMU_CF_ACCESS_EMAILS` | – | optional comma-separated allowlist for the JWT's email / service-token ID |
 | `PIMU_TELEGRAM_TOKEN` / `PIMU_TELEGRAM_CHAT_ID` | – | both set → notifications via Telegram |
 | `PIMU_LOG_LEVEL` | `info` | `debug` also logs pi stderr |
 | `PI_CODING_AGENT_DIR` | `~/.pi/agent` | pi's own config dir, honoured as pi does |
@@ -109,9 +111,11 @@ internal/goals/    heartbeats and actions
 internal/tasks/    cron tasks
 internal/sessions/ read-only index of pi session files
 internal/caps/     per-session capability tokens
+internal/cfaccess/ Cloudflare Access JWT verification
 extensions/        pimu-agent.ts (gate, pimu_task), pimu-guard.ts (terminal lock)
 web/               React + Vite PWA (embedded into the binary)
-docs/              GUIDE, DESIGN, AUTONOMY, SLASH, HISTORY, screenshots
+docs/              GUIDE, DESIGN, AUTONOMY, SLASH, DEPLOY, HISTORY, screenshots
+deploy/            systemd unit, cloudflared template
 ```
 
 ## Safety model
@@ -130,17 +134,12 @@ docs/              GUIDE, DESIGN, AUTONOMY, SLASH, HISTORY, screenshots
 
 ## Deploy
 
-```bash
-make install install-guard install-agent
-mkdir -p ~/.config/pimu && printf 'PIMU_TOKEN=%s\nPIMU_PUBLIC_URL=https://pimu.example.com\n' "$(openssl rand -hex 32)" > ~/.config/pimu/env
-chmod 600 ~/.config/pimu/env
-cp deploy/pimu.service ~/.config/systemd/user/ && systemctl --user enable --now pimu
-loginctl enable-linger "$USER"
-```
-
-Expose it through a tunnel (e.g. `cloudflared tunnel create pimu`, ingress
-`pimu.example.com → http://127.0.0.1:7777`, plus an access policy for your email).
-A 2 vCPU / 3 GB VPS runs Pimu (~16 MB) and three pi processes comfortably.
+For an always-on VPS behind Cloudflare Tunnel + Access, follow
+[docs/DEPLOY.md](docs/DEPLOY.md): a dedicated `pimu` user, a hardened system unit
+([deploy/pimu.service](deploy/pimu.service)), a tunnel template
+([deploy/cloudflared.yml](deploy/cloudflared.yml)), Access JWT verification in
+Pimu, signed webhooks, firewall, backups and updates. A 2 vCPU / 3 GB VPS runs
+Pimu (~16 MB) and three pi processes comfortably.
 
 ## Limitations
 
@@ -153,4 +152,5 @@ A 2 vCPU / 3 GB VPS runs Pimu (~16 MB) and three pi processes comfortably.
 ## Docs
 
 [GUIDE](docs/GUIDE.md) (full usage reference) · [DESIGN](docs/DESIGN.md) ·
-[AUTONOMY](docs/AUTONOMY.md) · [SLASH](docs/SLASH.md) · [HISTORY](docs/HISTORY.md)
+[AUTONOMY](docs/AUTONOMY.md) · [SLASH](docs/SLASH.md) · [DEPLOY](docs/DEPLOY.md) ·
+[HISTORY](docs/HISTORY.md)

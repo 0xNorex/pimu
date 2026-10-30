@@ -71,6 +71,17 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
   of the timeline and the Activity tab, as in pi's TUI. The gate already treated
   `codemode` as `reachesTools`, so each nested call is gated on its own.
 
+## Deploy hardening
+
+- Cloudflare Access JWT check in Pimu (`internal/cfaccess`, stdlib only): RS256,
+  `iss`, `aud`, `exp`/`nbf` (60 s skew), JWKS cache refetched on an unknown `kid`
+  (rate-limited), optional email allowlist; header or `CF_Authorization` cookie.
+  Pimu's own token login stays as the second factor.
+- Webhooks accept `X-Pimu-Signature` / `X-Hub-Signature-256` (HMAC-SHA256 of the
+  body with the hook secret); with Access on, `?k=` alone needs a service token.
+- System unit for a `pimu` user with systemd sandboxing, cloudflared template,
+  [DEPLOY.md](DEPLOY.md).
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's
@@ -78,4 +89,5 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
   change `tool_call.input` after the gate.
 - In guarded mode, MCP tools without `readOnlyHint` (e.g. `browser_navigate`) ask.
 - Not verified: iPhone Safari by hand, Telegram delivery, very long gate waits, the
-  daily token cap, switching mode while a reply is streaming, systemd/cloudflared.
+  daily token cap, switching mode while a reply is streaming, the systemd sandbox at runtime and
+  SSE through a real tunnel (unit syntax checked with `systemd-analyze verify`).

@@ -436,6 +436,8 @@ MemoryMax=2500M
 WantedBy=default.target
 ```
 
+> 现行部署见 [DEPLOY.md](DEPLOY.md)（system unit + `pimu` 用户）；下面是早期的 user unit 方案。
+
 安装：`install -m755 bin/pimu ~/.local/bin/ && systemctl --user daemon-reload && systemctl --user enable --now pimu && loginctl enable-linger $USER`（linger 让用户服务开机即跑）。**【不确定】** pi 官方安装脚本把 `pi`/Node 放在哪个路径，`PATH` 需按实际 `which pi` 调整，或直接设 `PIMU_PI_BIN` 绝对路径。
 
 `~/.config/pimu/env`（`chmod 600`）：

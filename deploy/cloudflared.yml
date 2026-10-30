@@ -1,0 +1,21 @@
+# /etc/cloudflared/config.yml - template, see docs/DEPLOY.md.
+#   cloudflared tunnel login && cloudflared tunnel create pimu
+#   cloudflared tunnel route dns pimu pimu.example.com
+#   sudo cloudflared service install
+tunnel: <TUNNEL-UUID>
+credentials-file: /etc/cloudflared/<TUNNEL-UUID>.json
+
+ingress:
+  - hostname: pimu.example.com
+    # Pimu listens on loopback only (PIMU_ADDR=127.0.0.1:7777).
+    service: http://127.0.0.1:7777
+    originRequest:
+      connectTimeout: 10s
+      # SSE (/api/sessions/*/events, /api/events): Pimu sends
+      # "Content-Type: text/event-stream", "X-Accel-Buffering: no" and a
+      # ": ping" comment every 15 s, so neither cloudflared nor the Cloudflare
+      # edge (100 s idle limit) buffers or cuts the stream. Nothing to tune.
+      keepAliveTimeout: 90s
+      # Pimu speaks HTTP/1.1 to the tunnel; leave http2Origin off.
+      # http2Origin: false
+  - service: http_status:404

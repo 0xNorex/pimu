@@ -1,17 +1,54 @@
+# System unit: runs Pimu as the unprivileged `pimu` user. See docs/DEPLOY.md.
+#   sudo install -m644 deploy/pimu.service /etc/systemd/system/pimu.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pimu
 [Unit]
 Description=Pimu - Just Pi, everywhere
+Wants=network-online.target
 After=network-online.target
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/pimu serve
-EnvironmentFile=%h/.config/pimu/env
-Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+User=pimu
+Group=pimu
+WorkingDirectory=/home/pimu
+Environment=HOME=/home/pimu
+Environment=PATH=/home/pimu/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/home/pimu/.config/pimu/env
+ExecStart=/usr/local/bin/pimu serve
 Restart=on-failure
 RestartSec=3
 KillMode=mixed
 TimeoutStopSec=20
-MemoryMax=2500M
+
+# Hardening. The home is read-only except the paths pi and Pimu write to,
+# so the env file, ~/.config and installed binaries cannot be changed by bots.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+# ~/.pi: pi settings + sessions; ~/.local/share/pimu: pimu.db, bots, run;
+# ~/work: projects listed in PIMU_WORKDIRS; ~/.cache: npm/playwright caches.
+# Leading "-" = ignore if the directory does not exist yet.
+ReadWritePaths=/home/pimu/.pi /home/pimu/.local/share/pimu -/home/pimu/work -/home/pimu/.cache -/home/pimu/.npm
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+UMask=0077
+# Not set on purpose: MemoryDenyWriteExecute (breaks Node's JIT) and
+# RestrictNamespaces (breaks Chromium's sandbox if bots use Playwright).
+
+# Resources for a 2 vCPU / 3 GB box: pi children count against this cgroup.
+MemoryMax=1500M
+TasksMax=512
+#CPUQuota=150%
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
