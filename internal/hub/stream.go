@@ -33,7 +33,7 @@ func (s *Stream) publish(kind string, data []byte) {
 	s.seq++
 	ev := Event{ID: s.seq, Kind: kind, Data: data}
 	s.ring = append(s.ring, ev)
-	if len(s.ring) > ringSize {
+	if len(s.ring) > ringSize+ringSize/4 { // trim in batches, not on every event
 		s.ring = append(s.ring[:0:0], s.ring[len(s.ring)-ringSize:]...)
 	}
 	for ch := range s.subs {

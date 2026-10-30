@@ -61,7 +61,7 @@ CREATE TABLE bots (
   archived     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-`, goalsSchema, jobsSchema, approvalsSchema, botModeSchema}
+`, goalsSchema, jobsSchema, approvalsSchema, botModeSchema, inboxIndexSchema}
 
 type Store struct{ db *sql.DB }
 
@@ -299,6 +299,13 @@ const (
 
 // botModeSchema adds the per-bot safety mode.
 const botModeSchema = `ALTER TABLE bots ADD COLUMN mode TEXT NOT NULL DEFAULT 'trusted';`
+
+// inboxIndexSchema indexes the inbox for per-job approval counts (job list),
+// the unread badge and the expiry sweep.
+const inboxIndexSchema = `
+CREATE INDEX inbox_job ON inbox(job_id) WHERE job_id IS NOT NULL;
+CREATE INDEX inbox_status ON inbox(status);
+`
 
 const botCols = `session_id, name, description, persona, cwd, archived, mode, created_at`
 

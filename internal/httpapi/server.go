@@ -3,6 +3,8 @@
 package httpapi
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"errors"
@@ -11,7 +13,9 @@ import (
 	"mime"
 	"net/http"
 	"os"
+	"path"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/0xNorex/pimu/internal/caps"
@@ -430,11 +434,46 @@ func staticHandler(static fs.FS) http.Handler {
 		} else if strings.HasPrefix(p, "assets/") {
 			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		}
+		if gz := zipped(static, p); gz != nil && strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
+			w.Header().Set("Content-Type", mime.TypeByExtension(path.Ext(p)))
+			w.Header().Set("Content-Encoding", "gzip")
+			w.Header().Set("Vary", "Accept-Encoding")
+			_, _ = w.Write(gz)
+			return
+		}
 		if _, err := fs.Stat(static, p); p != "" && err != nil {
 			r.URL.Path = "/" // hash routing: unknown paths get the app shell
 		}
 		files.ServeHTTP(w, r)
 	})
+}
+
+var (
+	gzMu    sync.Mutex
+	gzCache = map[string][]byte{}
+)
+
+// zipped returns the gzipped bytes of a hashed JS/CSS asset (compressed once,
+// they never change), or nil for anything else. Saves ~70% on a phone's first load.
+func zipped(static fs.FS, p string) []byte {
+	if !strings.HasPrefix(p, "assets/") || (!strings.HasSuffix(p, ".js") && !strings.HasSuffix(p, ".css")) {
+		return nil
+	}
+	gzMu.Lock()
+	defer gzMu.Unlock()
+	if b, ok := gzCache[p]; ok {
+		return b
+	}
+	raw, err := fs.ReadFile(static, p)
+	if err != nil {
+		return nil
+	}
+	var buf bytes.Buffer
+	zw, _ := gzip.NewWriterLevel(&buf, gzip.BestCompression)
+	_, _ = zw.Write(raw)
+	_ = zw.Close()
+	gzCache[p] = buf.Bytes()
+	return gzCache[p]
 }
 
 func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }

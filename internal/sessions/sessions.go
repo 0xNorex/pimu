@@ -78,12 +78,33 @@ func (x *Index) List() []Info {
 	return out
 }
 
-// Find returns the session with id, if a file for it exists.
+// Find returns the session with id, if a file for it exists. A session seen
+// before is checked with one stat instead of a full directory scan.
 func (x *Index) Find(id string) (Info, bool) {
+	if info, ok := x.known(id); ok {
+		return info, true
+	}
 	for _, s := range x.List() {
 		if s.ID == id {
 			return s, true
 		}
+	}
+	return Info{}, false
+}
+
+func (x *Index) known(id string) (Info, bool) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	for p, c := range x.cache {
+		if c.info.ID != id {
+			continue
+		}
+		st, err := os.Stat(p)
+		if err != nil || !c.mod.Equal(st.ModTime()) || c.size != st.Size() {
+			return Info{}, false // gone or changed: let List rescan
+		}
+		c.info.UpdatedAt = st.ModTime()
+		return c.info, true
 	}
 	return Info{}, false
 }
