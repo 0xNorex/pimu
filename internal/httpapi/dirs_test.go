@@ -39,8 +39,8 @@ func TestDirsStayInsideRoots(t *testing.T) {
 	if code != 200 || out["parent"] != nil {
 		t.Fatalf("root: %d %v", code, out)
 	}
-	// escape is a symlink out of the root: still listed by name, but not enterable.
-	if got := out["dirs"].([]any); len(got) != 3 || got[0] != "a" || got[1] != "c" || got[2] != "escape" {
+	// escape is a symlink out of the root: not listed (it could only fail when clicked) and not enterable.
+	if got := out["dirs"].([]any); len(got) != 2 || got[0] != "a" || got[1] != "c" {
 		t.Fatalf("dirs: %v", got)
 	}
 	if code, out = call("GET", q(filepath.Join(root, "a")), ""); code != 200 || out["parent"] != root {

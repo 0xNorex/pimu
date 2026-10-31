@@ -507,7 +507,8 @@ func (s *Server) handleApprovalStatus(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 500, "db_error", err.Error())
 		return
 	}
-	if verdict == store.VerdictRun {
+	if verdict == store.VerdictRun || verdict == store.VerdictGone {
+		// claimed, or expired by this poll: either way the card must go
 		s.hub.Broadcast(map[string]any{"type": "inbox"})
 	}
 	writeJSON(w, 200, map[string]any{"id": it.ID, "verdict": verdict})

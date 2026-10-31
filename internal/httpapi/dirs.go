@@ -52,7 +52,7 @@ func (s *Server) handleDirs(w http.ResponseWriter, r *http.Request) {
 			if strings.HasPrefix(e.Name(), ".") {
 				continue
 			}
-			if e.IsDir() || (e.Type()&os.ModeSymlink != 0 && isDir(filepath.Join(dir, e.Name()))) {
+			if e.IsDir() || (e.Type()&os.ModeSymlink != 0 && s.allowedLink(filepath.Join(dir, e.Name()))) {
 				out.Dirs = append(out.Dirs, e.Name())
 			}
 			if len(out.Dirs) >= 500 {
@@ -64,9 +64,11 @@ func (s *Server) handleDirs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, out)
 }
 
-func isDir(p string) bool {
-	st, err := os.Stat(p)
-	return err == nil && st.IsDir()
+// allowedLink: a symlinked directory is listed only when its target is
+// itself allowed; a link out of PIMU_WORKDIRS would only fail when clicked.
+func (s *Server) allowedLink(p string) bool {
+	_, ok := s.cfg.AllowedDir(p)
+	return ok
 }
 
 // handleMkdir: POST /api/dirs {path, name} creates one subdirectory.

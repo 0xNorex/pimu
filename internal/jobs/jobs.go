@@ -220,9 +220,8 @@ func (s *Service) run(ctx context.Context, j store.Job) (status, result, errText
 			actx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			_, _ = s.hub.Call(actx, r, map[string]any{"type": "abort"}, 5*time.Second)
 			cancel()
-			return "interrupted", "", fmt.Sprintf("%d 分钟没有任何进展，已停下", max(1, int(s.Idle.Minutes()))), tokens
+			return "interrupted", "", idleText(s.Idle) + "没有任何进展，已停下", tokens
 		case ev, ok := <-ch:
-			idle.Reset(s.Idle)
 			if !ok {
 				ch, _, _ = stream.Subscribe(stream.Seq()) // slow subscriber: keep going, tokens may undercount
 				continue
@@ -239,7 +238,10 @@ func (s *Service) run(ctx context.Context, j store.Job) (status, result, errText
 				} `json:"message"`
 			}
 			if ev.Kind != "pi" || json.Unmarshal(ev.Data, &m) != nil {
-				continue
+				continue // Pimu's own stream notices are not progress
+			}
+			if m.Type != "response" { // replies to our own RPC calls (state polls) are not progress either
+				idle.Reset(s.Idle)
 			}
 			switch m.Type {
 			case "message_end":
@@ -439,4 +441,11 @@ func firstErr(err error, msg string) string {
 		return err.Error()
 	}
 	return msg
+}
+
+func idleText(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%d 秒", int(d.Seconds()))
+	}
+	return fmt.Sprintf("%d 分钟", int(d.Minutes()))
 }

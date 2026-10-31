@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"time"
 )
 
@@ -19,11 +21,18 @@ import (
 // one approval only one runs. The row is marked used before the tool runs:
 // a crash or retry can never run it a second time; an identical later call
 // files a fresh request instead.
-const (
-	PendingTTL  = 24 * time.Hour
+var (
+	PendingTTL  = envTTL("PIMU_APPROVAL_TTL_SEC", 24*time.Hour) // unanswered requests (env: tests)
 	ApprovedTTL = 2 * time.Hour
 	DeniedHold  = 24 * time.Hour
 )
+
+func envTTL(name string, def time.Duration) time.Duration {
+	if n, err := strconv.Atoi(os.Getenv(name)); err == nil && n > 0 {
+		return time.Duration(n) * time.Second
+	}
+	return def
+}
 
 const approvalsSchema = `
 ALTER TABLE inbox ADD COLUMN used_by TEXT NOT NULL DEFAULT '';

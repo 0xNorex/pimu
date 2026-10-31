@@ -231,6 +231,16 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 				Messages json.RawMessage `json:"messages"`
 			}
 			_ = json.Unmarshal(resp.Data, &d)
+			var live []json.RawMessage
+			if json.Unmarshal(d.Messages, &live) == nil {
+				if info, ok := s.hub.Idx.Find(id); ok && bytes.Contains(d.Messages, []byte(`"compactionSummary"`)) {
+					if file, err := sessions.Messages(info.Path); err == nil {
+						live = sessions.MergeCompacted(live, file)
+					}
+				}
+				writeJSON(w, 200, map[string]any{"messages": live, "seq": seq, "live": true})
+				return
+			}
 			writeJSON(w, 200, map[string]any{"messages": d.Messages, "seq": seq, "live": true})
 			return
 		}

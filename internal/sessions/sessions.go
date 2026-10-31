@@ -123,6 +123,7 @@ type entry struct {
 	Cwd      string          `json:"cwd"`
 	Name     *string         `json:"name"`
 	Message  json.RawMessage `json:"message"`
+	raw      []byte
 }
 
 type message struct {
@@ -233,34 +234,111 @@ func Messages(path string) ([]json.RawMessage, error) {
 		if json.Unmarshal(line, &e) != nil || e.ID == "" || e.Type == "session" {
 			return
 		}
+		e.raw = append([]byte(nil), line...)
 		byID[e.ID] = e
 		leaf = e.ID
 	})
 	if err != nil {
 		return nil, err
 	}
-	var out []json.RawMessage
+	var chain []entry // leaf → root
 	for id := leaf; id != ""; {
 		e, ok := byID[id]
 		if !ok {
 			break
 		}
 		delete(byID, id) // guards against cycles
-		if e.Type == "message" {
-			var m message
-			if json.Unmarshal(e.Message, &m) == nil && (m.Role == "user" || m.Role == "assistant" || m.Role == "toolResult") {
-				out = append(out, e.Message)
-			}
-		}
+		chain = append(chain, e)
 		id = ""
 		if e.ParentID != nil {
 			id = *e.ParentID
 		}
 	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
+	var out []json.RawMessage
+	at := map[string]int{} // entry id → index in out of the first message at or after it
+	for i := len(chain) - 1; i >= 0; i-- {
+		e := chain[i]
+		at[e.ID] = len(out)
+		switch e.Type {
+		case "message":
+			var m message
+			if json.Unmarshal(e.Message, &m) == nil && chatRoles[m.Role] {
+				out = append(out, e.Message)
+			}
+		case "compaction":
+			// Shown where pi's own context shows it: right before the kept messages.
+			var c struct {
+				Summary      string `json:"summary"`
+				FirstKept    string `json:"firstKeptEntryId"`
+				TokensBefore int    `json:"tokensBefore"`
+				Timestamp    string `json:"timestamp"`
+			}
+			_ = json.Unmarshal(e.raw, &c)
+			ts := int64(0)
+			if t, err := time.Parse(time.RFC3339Nano, c.Timestamp); err == nil {
+				ts = t.UnixMilli()
+			}
+			msg, _ := json.Marshal(map[string]any{"role": "compactionSummary", "summary": c.Summary, "tokensBefore": c.TokensBefore, "timestamp": ts})
+			p, ok := at[c.FirstKept]
+			if !ok {
+				p = len(out)
+			}
+			out = append(out[:p], append([]json.RawMessage{msg}, out[p:]...)...)
+			for k, v := range at {
+				if v > p || (v == p && k != c.FirstKept) {
+					at[k] = v + 1
+				}
+			}
+			at[c.FirstKept] = p + 1
+		}
 	}
 	return out, nil
+}
+
+// chatRoles are the message roles kept from a session file; pi's live
+// get_messages returns the same set, so idle and live histories agree.
+var chatRoles = map[string]bool{"user": true, "assistant": true, "toolResult": true, "system": true}
+
+// Role reads a message's role.
+func Role(m json.RawMessage) string {
+	var r struct {
+		Role string `json:"role"`
+	}
+	_ = json.Unmarshal(m, &r)
+	return r.Role
+}
+
+// MergeCompacted: after a compaction pi's live context starts at the summary;
+// the full history before it comes from the file, so a running session does
+// not lose what an idle one shows.
+func MergeCompacted(live, file []json.RawMessage) []json.RawMessage {
+	i := -1
+	for n, m := range live {
+		if Role(m) == "compactionSummary" {
+			i = n
+			break
+		}
+	}
+	if i < 0 {
+		return live
+	}
+	k := -1
+	for n := len(file) - 1; n >= 0; n-- {
+		if Role(file[n]) == "compactionSummary" {
+			k = n
+			break
+		}
+	}
+	if k <= 0 {
+		return live
+	}
+	out := append([]json.RawMessage{}, live[:i]...)
+	for _, m := range file[:k] {
+		if Role(m) != "system" || i == 0 {
+			out = append(out, m)
+		}
+	}
+	return append(out, live[i:]...)
 }
 
 // Meta is the model and thinking level recorded in a session file, so an
