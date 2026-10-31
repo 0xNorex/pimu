@@ -120,7 +120,9 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
     if (!canSend) return
     const cmd = atts.length ? null : parseBuiltin(text)
     if (cmd) {
-      if (await onCommand(cmd[0], cmd[1])) setText('')
+      const sent = text
+      // only clear what was sent: the user may have typed on while it ran
+      if (await onCommand(cmd[0], cmd[1])) setText((t) => (t === sent ? '' : t))
       return
     }
     rec.current?.stop()
