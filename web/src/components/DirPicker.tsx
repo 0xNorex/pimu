@@ -9,23 +9,6 @@ import { shortPath } from '@/lib/format'
 
 type Dirs = { path?: string; parent?: string; dirs: string[]; roots: string[]; recent: string[]; home: string }
 
-const LAST = 'pimu-last-dir'
-// The directory the last bot was created in: the default for the next one.
-export const lastDir = () => {
-  try {
-    return localStorage.getItem(LAST) || ''
-  } catch {
-    return ''
-  }
-}
-export const rememberDir = (cwd: string) => {
-  try {
-    localStorage.setItem(LAST, cwd)
-  } catch {
-    /* private mode */
-  }
-}
-
 // Optional folder browser for a bot's working directory (the field also takes a typed path).
 export function DirPicker({ open, onOpenChange, start: want, onPick }: { open: boolean; onOpenChange: (o: boolean) => void; start?: string; onPick: (path: string) => void }) {
   const [d, setD] = useState<Dirs | null>(null)

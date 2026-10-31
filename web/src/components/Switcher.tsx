@@ -3,11 +3,12 @@ import { CalendarClockIcon, SearchIcon, SettingsIcon } from 'lucide-react'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { go } from '@/lib/route'
+import { newBot } from '@/lib/newBot'
 import type { Bot } from '@/lib/types'
 import { BotAvatar } from './BotAvatar'
 import { SECTIONS } from '@/lib/sections'
 
-type Hit = { key: string; label: string; sub?: string; href: string; bot?: string }
+type Hit = { key: string; label: string; sub?: string; href: string; bot?: string; run?: () => unknown }
 
 // ⌘K / Ctrl+K: jump to a bot or a settings section. Plain Dialog + filter, no cmdk.
 export function Switcher() {
@@ -18,9 +19,16 @@ export function Switcher() {
 
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return
+      const k = e.key.toLowerCase()
+      if (k === 'k') {
         e.preventDefault()
         setOpen((o) => !o)
+      } else if (k === 'n' && !location.hash.startsWith('#/login')) {
+        // ⌘N / Ctrl+N: new bot (where the browser lets the page have it; an installed PWA does)
+        e.preventDefault()
+        setOpen(false)
+        void newBot()
       }
     }
     window.addEventListener('keydown', on)
@@ -36,6 +44,7 @@ export function Switcher() {
   const hits = useMemo(() => {
     const all: Hit[] = [
       ...[...bots].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).map((b) => ({ key: b.id, label: b.name, sub: b.description, href: `#/s/${b.id}`, bot: b.id })),
+      { key: 'new', label: '新建 Bot', href: '', run: newBot },
       { key: 'tasks', label: '任务', href: '#/tasks' },
       ...SECTIONS.map(([k, l]) => ({ key: `set-${k}`, label: `设置 · ${l}`, href: `#/settings/${k}` })),
     ]
@@ -46,7 +55,8 @@ export function Switcher() {
   const pick = (h?: Hit) => {
     if (!h) return
     setOpen(false)
-    go(h.href)
+    if (h.run) void h.run()
+    else go(h.href)
   }
 
   return (

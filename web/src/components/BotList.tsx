@@ -15,7 +15,7 @@ import type { Bot, InboxItem, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { isDark, reveal } from '@/lib/prefs'
 import { BotAvatar } from './BotAvatar'
-import { openNewBot } from './BotDialog'
+import { newBot } from '@/lib/newBot'
 
 // Previews are raw markdown; drop the syntax characters.
 const plain = (t: string) => t.replace(/[*_`#>]+/g, '').replace(/^\s*[-+]\s+/, '').replace(/\s+/g, ' ').trim()
@@ -142,7 +142,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
     ) : nBots === 0 ? (
       <div className="row-in flex flex-col items-center px-6 pt-10 pb-6 text-center">
         <p className="font-heading text-base font-semibold">还没有 Bot</p>
-        <Button className="mt-4 h-11 lg:h-9" onClick={openNewBot}>
+        <Button className="mt-4 h-11 lg:h-9" onClick={() => void newBot()}>
           <PlusIcon /> 新建 Bot
         </Button>
       </div>
@@ -187,7 +187,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
             {unread > 0 && <span className="dot-in absolute top-2 right-2 size-2 rounded-full bg-primary" aria-hidden />}
           </a>
         </Button>
-        <Button size="icon" variant="ghost" className="size-11 lg:size-9" aria-label="新建 Bot" title="新建 Bot" onClick={openNewBot}>
+        <Button size="icon" variant="ghost" className="size-11 lg:size-9" aria-label="新建 Bot" title="新建 Bot（⌘N）" onClick={() => void newBot()}>
           <PlusIcon />
         </Button>
       </header>

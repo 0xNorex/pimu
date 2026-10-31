@@ -229,6 +229,9 @@ html[data-palette="contrast"] body::after { display: none; }
 
 /* Message appear: rise 6px and fade. */
 .msg-in { animation: pimu-rise 260ms var(--ease-out) both; }
+/* A bot's auto-title arriving after its first message. */
+.title-in { animation: pimu-title 520ms var(--ease-out) both; }
+@keyframes pimu-title { from { opacity: 0; filter: blur(3px); } }
 @keyframes pimu-rise { from { opacity: 0; transform: translateY(6px); } }
 
 /* Page enter (mobile push / desktop pane swap). */

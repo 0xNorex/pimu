@@ -50,9 +50,10 @@ type Props = {
   onSend: (text: string, behavior?: 'steer' | 'followUp', images?: Image[]) => Promise<boolean>
   onCommand: (name: string, arg: string) => Promise<boolean>
   onAbort: () => void
+  autoFocus?: boolean
 }
 
-export function Composer({ sessionId, name, visionOk, streaming, disabled, queued, onSend, onCommand, onAbort }: Props) {
+export function Composer({ sessionId, name, visionOk, streaming, disabled, queued, onSend, onCommand, onAbort, autoFocus }: Props) {
   const [text, setText] = useState('')
   const [atts, setAtts] = useState<Att[]>([])
   const [listening, setListening] = useState(false)
@@ -64,6 +65,10 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
   const slash = /^\/\S*$/.test(text) ? text.slice(1) : null
 
   useEffect(() => setCommands(null), [sessionId])
+  // A fresh bot ('+'): ready to type, keyboard up on a phone.
+  useEffect(() => {
+    if (autoFocus) ref.current?.focus()
+  }, [autoFocus])
   useEffect(() => {
     if (slash === null || commands) return
     api<{ commands: Command[] }>(`/api/sessions/${sessionId}/commands`)
@@ -278,7 +283,7 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
           onPaste={onPaste}
           disabled={disabled}
           rows={1}
-          placeholder={disabled ? '只读' : listening ? '正在听…' : streaming ? '追加消息…' : `发消息给 ${name ?? '助手'}`}
+          placeholder={disabled ? '只读' : listening ? '正在听…' : streaming ? '追加消息…' : name ? `发消息给 ${name}` : '发消息'}
           className="max-h-48 min-h-10 resize-none border-0 bg-transparent px-1.5 py-2 text-base shadow-none focus-visible:ring-0 dark:bg-transparent"
           aria-label="消息"
         />

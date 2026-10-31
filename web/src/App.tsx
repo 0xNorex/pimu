@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react'
 import { LoginPage } from '@/components/LoginPage'
 import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
-import { NewBot, openNewBot } from '@/components/BotDialog'
+import { newBot } from '@/lib/newBot'
 import { PlusIcon } from 'lucide-react'
 import { SECTIONS, type Section } from '@/lib/sections'
 
@@ -67,21 +67,18 @@ export default function App() {
           </aside>
           {page ? <Suspense fallback={<main className="flex-1" />}>{page}</Suspense> : (
             <main className="hidden flex-1 flex-col items-center justify-center text-sm text-muted-foreground lg:flex">
-              <span className="brand-mark idle-mark mb-5 size-12! rounded-2xl!" aria-hidden />
-              <p className="font-heading text-base font-semibold text-foreground">选一个 Bot 开聊</p>
-              <p className="mt-1">随手的问题交给「助手」</p>
-              <div className="mt-5 flex items-center gap-4 text-xs">
-                <span className="flex items-center gap-1.5"><kbd className="rounded border bg-card px-1.5 py-0.5 font-mono text-[11px]">⌘K</kbd> 搜索</span>
-                <button type="button" className="pressable flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-foreground/[0.05] hover:text-foreground" onClick={openNewBot}>
-                  <PlusIcon className="size-3.5" /> 新建 Bot
+              <span className="brand-mark idle-mark mb-6 size-12! rounded-2xl!" aria-hidden />
+              <div className="flex items-center gap-2 text-xs">
+                <button type="button" className="pressable flex min-h-9 items-center gap-1.5 rounded-md px-2.5 hover:bg-foreground/[0.05] hover:text-foreground" onClick={() => void newBot()}>
+                  <PlusIcon className="size-3.5" /> 新建 <kbd className="ml-1 rounded border bg-card px-1.5 py-0.5 font-mono text-[11px]">⌘N</kbd>
                 </button>
+                <span className="flex min-h-9 items-center gap-1.5 px-2.5">搜索 <kbd className="ml-1 rounded border bg-card px-1.5 py-0.5 font-mono text-[11px]">⌘K</kbd></span>
               </div>
             </main>
           )}
         </>
       )}
       {route.name !== 'login' && <Switcher />}
-      {route.name !== 'login' && <NewBot />}
       {/* Desktop: out of the way, bottom-right. Phone: top, below the header, clear of the composer. */}
       <Toaster position={wide ? 'bottom-right' : 'top-center'} visibleToasts={3} mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 60px)' }} />
     </div>

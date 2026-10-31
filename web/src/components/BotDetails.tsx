@@ -1,11 +1,17 @@
 import type { ReactNode } from 'react'
-import { ChevronDownIcon, PencilIcon } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { ArchiveIcon, ArchiveRestoreIcon, ChevronDownIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { api, errMsg } from '@/lib/api'
-import type { Bot } from '@/lib/types'
+import { botsChanged } from '@/lib/bus'
+import { archiveBot } from '@/lib/newBot'
+import { go } from '@/lib/route'
+import { ASSISTANT, type Bot } from '@/lib/types'
 import { BotAvatar } from './BotAvatar'
 import { BotGoals } from './BotGoals'
 import { BotHistory } from './BotHistory'
@@ -25,9 +31,46 @@ export function Fold({ title, children, open }: { title: string; children: React
   )
 }
 
+// 设定: description, persona and how it works. Saved as you leave a field (or
+// tap a mode); nothing to submit.
+function BotSettings({ bot, onBot }: { bot: Bot; onBot: (b: Bot) => void }) {
+  const [f, setF] = useState({ description: bot.description, persona: bot.persona })
+  useEffect(() => setF({ description: bot.description, persona: bot.persona }), [bot.id, bot.description, bot.persona])
+  const save = async (patch: Partial<Bot>) => {
+    if (Object.entries(patch).every(([k, v]) => bot[k as keyof Bot] === v)) return
+    try {
+      const r = await api<{ bot: Bot }>(`/api/bots/${bot.id}`, patch, 'PATCH')
+      onBot({ ...bot, ...r.bot })
+      botsChanged()
+    } catch (e) {
+      toast.error(errMsg(e))
+    }
+  }
+  const mode = bot.mode ?? 'trusted'
+  return (
+    <div className="grid gap-3">
+      <Input aria-label="一句话简介" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} onBlur={() => void save({ description: f.description.trim() })} placeholder="一句话简介" maxLength={120} className="min-h-11 text-base sm:text-sm" />
+      <Textarea aria-label="人设" value={f.persona} onChange={(e) => setF({ ...f, persona: e.target.value })} onBlur={() => void save({ persona: f.persona.trim() })} rows={4} placeholder="人设：它是谁、怎么说话、要遵守什么" className="text-base sm:text-sm" />
+      <div role="radiogroup" aria-label="做事方式" className="grid grid-cols-2 gap-2">
+        {(
+          [
+            ['trusted', '直接做', '不打断你'],
+            ['guarded', '先问我', '改文件、跑命令前先问'],
+          ] as const
+        ).map(([v, label, hint]) => (
+          <button key={v} type="button" role="radio" aria-checked={mode === v} onClick={() => void save({ mode: v })} className={`pressable min-h-11 rounded-lg border px-3 py-2 text-left text-sm transition-colors ${mode === v ? 'border-primary bg-primary/5' : 'text-muted-foreground'}`}>
+            <div className="font-medium text-foreground">{label}</div>
+            <div className="text-xs">{hint}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // Everything about a bot that is not the conversation: the one place for
 // background work, goals, schedules, usage and the developer bits.
-export function BotDetails({ open, onOpenChange, bot, onBot, onEdit, advanced, onClosed }: { onClosed?: () => void; open: boolean; onOpenChange: (v: boolean) => void; bot: Bot | null; onBot: (b: Bot) => void; onEdit: () => void; advanced: ReactNode }) {
+export function BotDetails({ open, onOpenChange, bot, onBot, advanced, onClosed }: { onClosed?: () => void; open: boolean; onOpenChange: (v: boolean) => void; bot: Bot | null; onBot: (b: Bot) => void; advanced: ReactNode }) {
   const pause = async (paused: boolean) => {
     if (!bot) return
     try {
@@ -44,11 +87,6 @@ export function BotDetails({ open, onOpenChange, bot, onBot, onEdit, advanced, o
           {bot && <BotAvatar id={bot.id} className="size-16 shadow-soft" />}
           <SheetTitle className="text-lg">{bot?.name ?? '对话'}</SheetTitle>
           <SheetDescription>{bot?.description}</SheetDescription>
-          {bot && (
-            <Button variant="outline" size="sm" className="mt-1 min-h-9" onClick={onEdit}>
-              <PencilIcon /> 编辑
-            </Button>
-          )}
         </SheetHeader>
         <div className="px-4">
           {bot && (
@@ -72,9 +110,25 @@ export function BotDetails({ open, onOpenChange, bot, onBot, onEdit, advanced, o
               <Fold title="定时任务">
                 <BotTasks botId={bot.id} />
               </Fold>
+              <Fold title="设定">
+                <BotSettings bot={bot} onBot={onBot} />
+              </Fold>
             </>
           )}
           <Fold title="高级">{advanced}</Fold>
+          {bot && bot.id !== ASSISTANT && (
+            <div className="border-t pt-2">
+              {bot.archived ? (
+                <Button variant="ghost" className="min-h-11 w-full justify-start text-muted-foreground" onClick={() => void api<{ bot: Bot }>(`/api/bots/${bot.id}`, { archived: false }, 'PATCH').then((r) => (onBot({ ...bot, ...r.bot }), botsChanged(), toast.success('已恢复')), (e) => toast.error(errMsg(e)))}>
+                  <ArchiveRestoreIcon /> 恢复
+                </Button>
+              ) : (
+                <Button variant="ghost" className="min-h-11 w-full justify-start text-muted-foreground" onClick={() => void archiveBot(bot, () => (onOpenChange(false), go('#/')))}>
+                  <ArchiveIcon /> 归档
+                </Button>
+              )}
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>

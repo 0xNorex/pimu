@@ -15,8 +15,10 @@ import { markSeen } from '@/lib/seen'
 import type { Bot, Model, SessionDetail } from '@/lib/types'
 import { useSessionEvents } from '@/lib/useSessionEvents'
 import { BotAvatar } from './BotAvatar'
-import { BotDialog } from './BotDialog'
 import { botsChanged } from '@/lib/bus'
+import { rememberDir } from '@/lib/newBot'
+import { DirPicker } from './DirPicker'
+import type { Topic } from '@/lib/types'
 import { BotDetails } from './BotDetails'
 import { resumeTopic } from './BotHistory'
 import { LiveJobs, StatusLine, TurnFoot } from './Work'
@@ -41,7 +43,8 @@ export function ChatView({ id }: { id: string }) {
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set())
   const [jobsLive, setJobsLive] = useState(0)
   const { work } = usePrefs()
-  const [editBot, setEditBot] = useState(false)
+  const [renaming, setRenaming] = useState(false)
+  const [picking, setPicking] = useState(false)
   const [bot, setBot] = useState<Bot | null>(null)
   const [visionOk, setVisionOk] = useState(true)
   const [atBottom, setAtBottom] = useState(true)
@@ -58,12 +61,17 @@ export function ChatView({ id }: { id: string }) {
   useEffect(() => {
     if (topicOf) api<{ bot: Bot }>(`/api/bots/${topicOf}`).then((r) => setOwner(r.bot)).catch(() => {})
   }, [topicOf])
-  // 新话题: the current conversation goes to 历史; the next message starts with an empty context.
+  // 新话题: the current conversation goes to 历史; the next message starts with an empty context. 撤销 brings it back.
   const newTopic = async () => {
     try {
       await api(`/api/bots/${id}/topics`, {})
       botsChanged()
-      toast.success('已开始新话题', { description: '之前的对话在「详情 → 历史」里。' })
+      toast('已开新话题', {
+        action: {
+          label: '撤销',
+          onClick: () => void api<{ topics: Topic[] }>(`/api/bots/${id}/topics`).then((r) => r.topics[0] && resumeTopic(id, r.topics[0].id)),
+        },
+      })
       return true
     } catch (e) {
       toast.error(errMsg(e))
@@ -120,9 +128,32 @@ export function ChatView({ id }: { id: string }) {
   }, [entries, atBottom])
 
   const readOnly = s.lock === 'external'
+  // A bot made with '+' has no name until its first message; then it joins the list.
+  const draft = !!bot && !bot.name
+  const patchBot = async (patch: Partial<Bot>) => {
+    try {
+      const r = await api<{ bot: Bot }>(`/api/bots/${id}`, patch, 'PATCH')
+      setBot(r.bot)
+      botsChanged()
+      return true
+    } catch (e) {
+      toast.error(errMsg(e))
+      return false
+    }
+  }
+  const setCwd = async (cwd: string) => {
+    if (await patchBot({ cwd })) {
+      rememberDir(cwd)
+      refreshDetail()
+      toast.success('工作目录已改', { description: '从下一个新话题起生效' })
+      return true
+    }
+    return false
+  }
   const send = async (message: string, behavior?: 'steer' | 'followUp', images?: { type: 'image'; data: string; mimeType: string }[]) => {
     try {
       await api(`/api/sessions/${id}/prompt`, { message, behavior, images })
+      if (draft) (loadBot(), botsChanged())
       dispatch({ type: 'clear_exit' })
       setAtBottom(true)
       haptic()
@@ -202,16 +233,13 @@ export function ChatView({ id }: { id: string }) {
         }
         return run('设置思考强度…', api(`/api/sessions/${id}/thinking`, { level: arg }), () => (refreshDetail(), `思考强度：${arg}`))
       case 'name':
-        if (!arg) {
-          if (bot) setEditBot(true)
-          else setSettings(true)
-          return true
-        }
-        return run('重命名…', bot ? api(`/api/bots/${id}`, { name: arg }, 'PATCH') : api(`/api/sessions/${id}/name`, { name: arg }), () => {
-          if (bot) loadBot()
-          refreshDetail()
-          return `已命名为「${arg}」`
-        })
+        if (!bot) return false
+        if (!arg) return setRenaming(true), true
+        return patchBot({ name: arg })
+      case 'cd':
+        if (!bot) return false
+        if (!arg) return setPicking(true), true
+        return setCwd(arg)
       case 'new':
         return bot ? newTopic() : false
       case 'resume':
@@ -236,7 +264,7 @@ export function ChatView({ id }: { id: string }) {
   const lastUser = [...s.messages].reverse().find((m) => m.role === 'user')
 
   const face = bot ?? owner
-  const title = face?.name || detail?.state?.sessionName || detail?.name || '对话'
+  const title = face?.name || (draft ? '' : detail?.state?.sessionName || detail?.name || '对话')
   const model = detail?.state?.model?.provider !== 'unknown' ? cleanModel(detail?.state?.model?.name || modelName || detail?.state?.model?.id) : undefined
 
   const retry = lastUser ? () => void send(textOf(lastUser)) : undefined
@@ -248,18 +276,34 @@ export function ChatView({ id }: { id: string }) {
         <Button variant="ghost" size="icon" className={`size-11 ${topicOf ? '' : 'lg:hidden'}`} aria-label="返回" onClick={() => go(topicOf ? `#/s/${topicOf}` : '#/')}>
           <ChevronLeftIcon />
         </Button>
-        <button type="button" className="flex min-w-0 items-center gap-2.5 rounded-md py-1.5 pr-2 pl-1 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none lg:pl-2" ref={infoBtn} onClick={() => setInfo(true)} aria-label="详情">
-          {face && (
-            <span className="relative shrink-0">
-              <BotAvatar id={face.id} className="size-8" />
-              {working && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 animate-pulse rounded-full border-2 border-background bg-primary" data-working aria-label="正在工作" />}
-            </span>
-          )}
-          <span className="truncate text-[15px] font-medium">{title}</span>
-          {topicOf && <span className="shrink-0 text-xs text-muted-foreground">· 以前的话题</span>}
+        <button type="button" className="relative flex size-11 shrink-0 items-center justify-center rounded-full focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" ref={infoBtn} onClick={() => setInfo(true)} aria-label="详情" title="详情">
+          {face && <BotAvatar id={face.id} className="size-8" />}
+          {working && <span className="absolute right-1 bottom-1 size-2.5 animate-pulse rounded-full border-2 border-background bg-primary" data-working aria-label="正在工作" />}
         </button>
+        {renaming && bot ? (
+          <NameInput
+            initial={bot.name}
+            onDone={async (name) => {
+              if (name && name !== bot.name && !(await patchBot({ name }))) return
+              setRenaming(false)
+            }}
+          />
+        ) : bot ? (
+          <button type="button" className="min-w-0 truncate rounded-md px-1.5 py-1 text-left text-[15px] font-medium hover:bg-foreground/[0.04] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" onClick={() => setRenaming(true)} aria-label="改名" title="点一下改名">
+            {title ? (
+              <span key={title} className="title-in">
+                {title}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">新 Bot</span>
+            )}
+          </button>
+        ) : (
+          <span className="min-w-0 truncate px-1.5 text-[15px] font-medium">{title}</span>
+        )}
+        {topicOf && <span className="shrink-0 text-xs text-muted-foreground">· 以前的话题</span>}
         <span className="flex-1" />
-        {bot && (
+        {bot && !draft && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="icon" className="size-11 lg:size-9" aria-label="更多">
@@ -282,11 +326,11 @@ export function ChatView({ id }: { id: string }) {
         <ScrollArea viewportRef={scroller} onScroll={onScroll} className="h-full">
           <div className="mx-auto flex max-w-(--chat-w) flex-col gap-(--msg-gap) px-4 py-4 text-(length:--chat-fs) leading-relaxed" data-work={work}>
             {!s.loaded && [0, 1, 2].map((i) => <Skeleton key={i} className="h-12 w-full" />)}
-            {s.loaded && items.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">
-                {bot && <BotAvatar id={bot.id} className="mx-auto mb-3 size-20 shadow-soft" />}
-                <p className="text-lg font-semibold tracking-tight text-foreground">{bot?.name ?? '新对话'}</p>
-                <p className="mt-1">{bot?.description || '发条消息开始。'}</p>
+            {s.loaded && items.length === 0 && bot && (
+              <div className="msg-in pt-[18vh] pb-12 text-center text-sm text-muted-foreground" data-empty>
+                <BotAvatar id={bot.id} className="mx-auto size-16 opacity-90 shadow-soft" />
+                {bot.name && <p className="mt-3 text-base font-medium text-foreground">{bot.name}</p>}
+                {bot.description && <p className="mt-0.5">{bot.description}</p>}
               </div>
             )}
             {entries.map((e, i) => {
@@ -343,26 +387,35 @@ export function ChatView({ id }: { id: string }) {
           </Button>
         </div>
       ) : (
-      <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onCommand={command} onAbort={abort} />
+      <Composer key={id} autoFocus={draft || undefined} sessionId={id} name={bot?.name || undefined} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onCommand={command} onAbort={abort} />
       )}
       {s.uiRequests[0] && <ExtensionDialog key={s.uiRequests[0].id} req={s.uiRequests[0]} onReply={reply(s.uiRequests[0].id)} />}
-      {bot && <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot} onSaved={setBot} />}
+      {bot && <DirPicker open={picking} onOpenChange={setPicking} start={bot.cwd} onPick={(p) => void setCwd(p)} />}
       <BotDetails
         onClosed={() => infoBtn.current?.focus()}
         open={info}
         onOpenChange={setInfo}
         bot={bot ?? owner}
         onBot={bot ? setBot : setOwner}
-        onEdit={() => (setInfo(false), setEditBot(true))}
         advanced={
           <div className="space-y-3">
             <Button variant="outline" className="min-h-11 w-full justify-start" disabled={readOnly} onClick={() => (setInfo(false), setSettings(true))}>
               模型与思考强度
             </Button>
+            {bot && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-muted-foreground">工作目录</span>
+                <span className="min-w-0 flex-1 truncate font-mono text-xs" title={bot.cwd} data-cwd>
+                  {bot.cwd}
+                </span>
+                <Button variant="outline" size="sm" className="min-h-9 shrink-0" onClick={() => setPicking(true)}>
+                  更改
+                </Button>
+              </div>
+            )}
             <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
               {[
                 ['模型', [model, detail?.state?.thinkingLevel].filter(Boolean).join(' · ')],
-                ['工作目录', detail?.cwd],
                 ['会话 ID', id],
                 ['终端打开', detail?.path ? `pi --session ${detail.path}` : '发第一条消息后可用'],
               ].map(([k, v]) => (
@@ -382,5 +435,32 @@ export function ChatView({ id }: { id: string }) {
       />
       <ModelPicker open={settings} onOpenChange={setSettings} detail={detail} onSaved={refreshDetail} />
     </main>
+  )
+}
+
+// Inline rename in the header: Enter or leaving the field saves, Esc cancels.
+function NameInput({ initial, onDone }: { initial: string; onDone: (name: string) => void }) {
+  const [v, setV] = useState(initial)
+  const done = useRef(false)
+  const finish = (name: string) => {
+    if (done.current) return
+    done.current = true
+    onDone(name)
+  }
+  return (
+    <input
+      autoFocus
+      value={v}
+      maxLength={40}
+      aria-label="名字"
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => finish(v.trim())}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' && !e.nativeEvent.isComposing) finish(v.trim())
+        if (e.key === 'Escape') finish('')
+      }}
+      className="h-9 min-w-0 flex-1 rounded-md bg-foreground/[0.05] px-2 text-base font-medium outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 lg:max-w-80 lg:text-[15px]"
+    />
   )
 }
