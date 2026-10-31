@@ -2,26 +2,42 @@
 
 Detailed reference for using Pimu. Start with the [README](../README.md).
 
-## Sessions and bots
+## Bots and topics
 
-Sessions come first. The new-session button (and `/new`) opens a directory
-picker: the `PIMU_WORKDIRS` roots and recent cwds, subfolders to click into, a
-path field (`~` works) and 新建文件夹. Everything stays inside the roots; a cwd
-outside them shows one note and falls back to the default. There is no "new
-bot" form. A bot is just a
-session you marked as long-lived: open any session → 菜单 → **设为 Bot** (name
-optional, defaults to the session title or first message; avatar is an
-identicon of the session id). **取消 Bot** drops only the bot metadata (name,
-persona, goals); the pi session file and the conversation stay. A bot's session
-file lives in `~/.local/share/pimu/bots/<id>/session/` (moved there when you set it,
-the old copy kept as `*.jsonl.pimu-moved`), so it no longer shows in a terminal
-`pi -r`; open it there with `pi --session <path>` if you need to.
+Pimu is bots only. The sidebar is the bot list (busy, then waiting for approval,
+then unread, then newest; archived ones folded at the bottom) with a search box
+and a **+** (新建 Bot). There are no plain sessions, tabs or directory groups.
 
-Home list: two tabs. **Bot** (default; busy, then waiting for approval, then
-unread, then newest) and **会话**: every other session, grouped by working directory (folder-name headers; 主目录 for `$HOME`),
-including sessions you started with `pi` in a terminal (marked with a terminal
-icon). Task runs (`pimu-t*`), heartbeats (`pimu-g*`) and background jobs
-(`pimu-j*`) are hidden there and shown under their task, goal or bot. Session ids stay in 详情, not in the list.
+- **助手** is built in: created on first start (id `pm-assistant`), working
+  directory = the first `PIMU_WORKDIRS` entry, for ad-hoc questions. It can be
+  renamed and edited but not archived or deleted.
+- **新建 Bot**: name (required), optional one-line description and persona,
+  working directory (defaults to the last one you used; 选择… opens the folder
+  picker: the `PIMU_WORKDIRS` roots, subfolders, a path field with `~`, 新建文件夹;
+  everything stays inside the roots). The avatar is an identicon of the bot id.
+- **新话题** (header ⋯, or `/new`) starts a fresh pi session for the bot: the
+  context is cleared, the previous conversation is archived. The chat always
+  shows the bot's current conversation.
+- **详情 → 历史** lists earlier topics (title + date, newest first). Opening one
+  shows it read-only (prompts return 409); **继续这个话题** makes it the current
+  conversation again and archives the one you were in (an empty one is dropped).
+  Switching waits while the bot is replying, and refuses while a terminal pi has
+  the conversation open.
+
+All of a bot's conversations are pi session files in
+`~/.local/share/pimu/bots/<id>/session/`. The current one has the bot's id as
+its pi session id; archived topics keep their own ids. To continue a bot in a
+terminal: 详情 → 高级 shows the command, `pi --session <path>`. Task runs
+(`pimu-t*`), heartbeats (`pimu-g*`) and background jobs (`pimu-j*`) stay in pi's
+own sessions directory and show under their task, goal or bot.
+
+**Upgrading from V16 or older.** On the first V17 start Pimu lists the plain
+(non-bot, non-background) sessions in `<data>/migrate-plain.json` and moves each
+into 助手 → 历史: the file is copied into 助手's session dir and the original is
+renamed `*.jsonl.pimu-moved`. Session ids and the cwd in each file are kept, so a
+resumed topic runs in its original folder. A session a terminal pi holds is
+skipped and retried every minute until it is free. Existing bots are unchanged.
+Sessions you create in a terminal later are left alone.
 
 The conversation, model, thinking level and system prompt live in pi's session
 file. Pimu's SQLite `bots` table keeps only what pi cannot: name, one-line
@@ -119,7 +135,7 @@ Writes are small read-modify-write edits through temp file + rename. They carry 
 
 ## End-to-end tests
 
-`make e2e` (or `e2e/run.sh`) builds Pimu, starts it on a temp agent dir and data dir with the real `pi` and a scripted mock model (`e2e/mockllm.mjs`), and drives Chrome with playwright-core through every flow: login, PWA, directory picker, streaming, abort, steer/follow-up, slash commands, uploads, bots and tabs, guarded approvals, background jobs (completed, approval, failed, queued, cancelled, interrupted), heartbeats, inbox, webhooks, settings, appearance, restart, reconnect after a server drop, the job idle watchdog, approval expiry, show-work modes, long streams, two tabs, concurrent bots, pause, budget caps, palette contrast, keyboard-only use and the phone layout. `PIMU_JOB_IDLE_SEC` and `PIMU_APPROVAL_TTL_SEC` shorten the watchdog and approval limits for tests. `ONLY=<regex>` runs a subset, `KEEP=1` keeps the temp dir (failure screenshots, logs), `e2e/run.sh serve` just starts everything. Your `~/.pi/agent` is never touched. Needs Chrome (`PW_CHROME`, default `/usr/bin/google-chrome`) and `npm i` in `e2e/` (run.sh does it).
+`make e2e` (or `e2e/run.sh`) builds Pimu, starts it on a temp agent dir and data dir with the real `pi` and a scripted mock model (`e2e/mockllm.mjs`), and drives Chrome with playwright-core through every flow: login, PWA, bot creation and the folder picker, the built-in 助手, 新话题 / 历史 / resume, migration of plain sessions, streaming, abort, steer/follow-up, slash commands, uploads, bot search, guarded approvals, background jobs (completed, approval, failed, queued, cancelled, interrupted), heartbeats, inbox, webhooks, settings, appearance, restart, reconnect after a server drop, the job idle watchdog, approval expiry, show-work modes, long streams, two tabs, concurrent bots, pause, budget caps, palette contrast, keyboard-only use and the phone layout. `PIMU_JOB_IDLE_SEC` and `PIMU_APPROVAL_TTL_SEC` shorten the watchdog and approval limits for tests. `ONLY=<regex>` runs a subset, `KEEP=1` keeps the temp dir (failure screenshots, logs), `e2e/run.sh serve` just starts everything. Your `~/.pi/agent` is never touched. Needs Chrome (`PW_CHROME`, default `/usr/bin/google-chrome`) and `npm i` in `e2e/` (run.sh does it).
 
 ## Browser (optional)
 
@@ -144,11 +160,11 @@ the Activity tab shows its calls (filter 浏览器操作) with screenshots inlin
 When the model passes a `filename`, Playwright only saves the file and returns
 text, so nothing renders.
 
-## Terminal and Pimu on the same session
+## Terminal and Pimu on the same bot
 
-Pimu holds `~/.pi/agent/locks/<id>.lock` while its pi runs a session. With the
-guard extension installed, a terminal `pi --session <id>` refuses to open a
-session Pimu holds. Hand it over with `pimu release <id>` (or 交给终端 in the
+Pimu holds `~/.pi/agent/locks/<id>.lock` while its pi runs a bot's conversation.
+Open it in a terminal with `pi --session <path>` (详情 → 高级). With the guard
+extension installed, the terminal pi refuses a conversation Pimu holds. Hand it over with `pimu release <id>` (or 交给终端 in the
 UI menu); while the terminal holds it, Pimu shows the session read-only and
 prompts return 409.
 

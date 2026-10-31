@@ -224,7 +224,7 @@ export function ChatView({ id }: { id: string }) {
         return run('重启 pi 进程…', api(`/api/sessions/${id}/release`, {}), () => '已重启，下一条消息会用新进程（重新加载扩展、Skills、MCP）')
       case 'fork':
       case 'clone':
-        toast(`/${name} 需要在终端里做`, { description: `pi --session ${id}，然后输入 /${name}` })
+        toast(`/${name} 需要在终端里做`, { description: `用 pi --session 打开（路径在「详情 → 高级」），然后输入 /${name}` })
         return true
     }
     return false

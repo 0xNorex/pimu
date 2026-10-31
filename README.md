@@ -4,9 +4,10 @@
 
 Pimu is a thin Go server and a mobile-first PWA around the unmodified
 [`pi`](https://github.com/earendil-works/pi) coding agent. It runs `pi --mode rpc`
-for each session and streams its events to your browser or iPhone. Models, tools,
-MCP, skills, sessions and auth all stay in pi; Pimu adds the things a phone needs:
+for each bot and streams its events to your browser or iPhone. Models, tools,
+MCP, skills and auth all stay in pi; Pimu adds the things a phone needs:
 a chat UI, long-lived bots, schedules, background jobs and approvals.
+Everything is a bot: a built-in **助手** takes ad-hoc questions.
 
 <p>
   <img src="docs/screenshots/home-iphone-dark.webp" width="200" alt="Home on iPhone, dark">
@@ -16,18 +17,22 @@ a chat UI, long-lived bots, schedules, background jobs and approvals.
 
 ## Why
 
-- You already use `pi` in a terminal and want the same sessions from your phone.
+- You already use `pi` in a terminal and want it from your phone too.
 - You want an assistant that keeps working (cron tasks, heartbeats, background
   jobs) on a small box you own, and asks before risky steps.
 - You do not want a second agent stack: one binary, one SQLite file, pi does the rest.
 
 ## Features
 
-- **Chat with any pi session**: streaming, thinking, tool steps, steer/follow-up
-  while it works, images and file upload, voice dictation, slash commands, ⌘K.
-- **Bots**: mark a session as long-lived, give it a name, persona and identicon.
-  Terminal and Pimu sessions share one list; a lock stops both writing at once.
-- **Tasks**: cron or manual runs inside a bot or a fresh session, with retries.
+- **Bots only**: the sidebar is a list of bots, each with a name, persona,
+  working directory and identicon. The built-in 助手 (cannot be deleted) is for
+  ad-hoc questions. `+` creates a bot.
+- **Topics**: 新话题 or `/new` starts a fresh pi session for the bot; earlier
+  conversations are in 详情 → 历史, readable and resumable (继续这个话题).
+- **Chat**: streaming, thinking, tool steps, steer/follow-up while it works,
+  images and file upload, voice dictation, slash commands, ⌘K. A lock stops a
+  terminal pi and Pimu writing the same conversation at once.
+- **Tasks**: cron or manual runs inside a bot or a fresh pi session, with retries.
 - **Background jobs**: say "放到后台做" and the bot delegates via `pimu_task`;
   the chat stays free and the result comes back with Pimu's own approval counts.
 - **Goals and inbox**: heartbeats with a zero-token precheck, notify / ask /
@@ -96,8 +101,11 @@ flowchart LR
   S -. "read only" .-> F
 ```
 
-Pimu never edits pi's session files; it reads them for the list and history and
-drives pi only through its RPC mode. Children get a per-session capability, never
+Each bot's conversations are pi session files under `<data>/bots/<id>/session/`;
+Pimu drives pi only through its RPC mode and touches the files only to archive a
+topic (rename + new header id) and, once, to move old plain sessions into 助手
+(originals kept as `*.pimu-moved`). Open a bot in a terminal with
+`pi --session <path>` (the path is in 详情 → 高级). Children get a per-session capability, never
 the server token.
 
 ```
@@ -109,7 +117,7 @@ internal/store/    SQLite: bots, tasks, goals, jobs, inbox, approvals
 internal/jobs/     background jobs (pimu_task)
 internal/goals/    heartbeats and actions
 internal/tasks/    cron tasks
-internal/sessions/ read-only index of pi session files
+internal/sessions/ index of pi session files (titles, messages)
 internal/caps/     per-session capability tokens
 internal/cfaccess/ Cloudflare Access JWT verification
 extensions/        pimu-agent.ts (gate, pimu_task), pimu-guard.ts (terminal lock)
@@ -145,6 +153,8 @@ Pimu (~16 MB) and three pi processes comfortably.
 
 - Single user, single machine. No multi-user accounts, no cloud VM.
 - pi's TUI-only commands (`/fork`, `/clone`) stay in the terminal.
+- A bot's new working directory applies from its next topic; an existing
+  conversation keeps the cwd recorded in its file.
 - Missed cron slots while Pimu is down are not backfilled.
 - Not verified by hand yet: iPhone Safari voice input, Telegram delivery,
   systemd + cloudflared on a fresh VPS.

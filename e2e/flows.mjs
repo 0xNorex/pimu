@@ -207,6 +207,7 @@ async function main() {
     await dlg.getByLabel('一句话简介').fill('端到端测试用')
     await dlg.getByRole('button', { name: '选择…' }).click()
     const pick = page.getByRole('dialog', { name: '选择工作目录' })
+    await until(async () => !!(await pick.getByLabel('目录路径').inputValue()), 5000, 'picker loaded') // don't race its first browse
     await pick.getByLabel('目录路径').fill(`${T}/work`)
     await pick.getByLabel('目录路径').press('Enter')
     await pick.getByRole('button', { name: 'proj' }).click()

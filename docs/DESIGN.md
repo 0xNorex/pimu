@@ -203,8 +203,9 @@ pimu/
 | POST | `/api/logout` | 清 cookie |
 | GET | `/api/workdirs` | 可选 cwd 列表 |
 | GET | `/api/models` | 可用模型（缓存） |
-| GET | `/api/sessions` | 列表：`id,path,cwd,name,preview,updatedAt,status(idle|running|streaming|external)` 按 `updatedAt` 倒序；扫描结果按文件 mtime 缓存 |
-| POST | `/api/sessions` | `{cwd, provider?, modelId?, thinking?}` → 启动并返回 `{id}` |
+| ~~GET/POST~~ | ~~`/api/sessions`~~ | V17 删除：没有普通会话了，列表是 `GET /api/bots`，新建是 `POST /api/bots {name, description?, persona?, cwd?}` |
+| GET/POST | `/api/bots/{id}/topics` | V17：历史话题列表 `{id,title,cwd,updatedAt}`（新的在前）/ 开新话题 |
+| POST | `/api/bots/{id}/topics/{topic}/resume` | V17：把以前的话题设为当前（当前的归档）；回复中或终端占用 → 409 |
 | GET | `/api/sessions/{id}` | 会话元信息 + 运行中则附 `get_state` 结果 |
 | GET | `/api/sessions/{id}/messages` | 运行中：`get_messages`；否则只读解析 JSONL（§4.5） |
 | GET | `/api/sessions/{id}/events` | SSE（§4.4） |
@@ -258,7 +259,7 @@ data: {"type":"proc_state","state":"ready"}
 - 列表：`<agent-dir>/sessions/*/*.jsonl`（或 `PI_CODING_AGENT_SESSION_DIR`），外加 Bot 会话 `<data-dir>/bots/*/session/*.jsonl`（见 4.5A）。读首行 header（`id,cwd,timestamp`），扫描最后一个 `session_info.name`、第一条 `role:user` 文本（截 80 字）作 preview。按 mtime 缓存。
 - 消息：取文件最后一个带 `id` 的条目为 leaf，沿 `parentId` 回溯到根得到当前分支，输出其中 `type:"message"` 且 role ∈ {user, assistant, toolResult} 的条目。**【不确定】** “最后一行即 leaf”在 `/tree` 跳转后可能不成立；运行中一律以 `get_messages` 为准。
 - 单行上限 16MB；解析失败的行跳过并记 warn。
-- 绝不写、不删除会话文件；唯一例外是 4.5A 的 Bot 会话迁移（复制 + 原文件改名备份）。
+- 不删除会话文件；写入只有两处：迁移（复制 + 原文件改名备份，4.5A/4.5B）和换话题时改 header id（4.5B）。
 
 ### 4.5A Bot 会话单独存放（V14）
 
@@ -271,8 +272,18 @@ data: {"type":"proc_state","state":"ready"}
 - 「会话文件放哪」与「工作目录」分开：pi 1.4 的 `--session-dir` 只决定文件位置（平铺 `<dir>/<ts>_<id>.jsonl`，无 cwd 子目录）；工作目录仍是 Bot 的 cwd（进程 cwd，写在文件 header 里），用户可选。
 - 启动 Bot 的 pi 时追加 `--session-dir <bots/<id>/session>`；文件已存在时 hub 照旧传 `--session <path>`（优先于 `--session-dir`）。
 - 迁移（`hub.MoveToBotDir`）：设为 Bot 时立即做一次，另有启动时 + 每分钟一次的扫描补上当时忙的 Bot。步骤：正在回复 → 跳过；空闲运行 → 先关进程；拿会话锁（终端里 pi 正占用 → 跳过）；复制到 `.tmp`、fsync、rename 进 Bot 目录；原文件改名为 `<原名>.jsonl.pimu-moved` 作备份（不再被 pi/Pimu 列出）。备份确认无用后可手动删除。
-- 取消 Bot：文件留在 Bot 目录，仍被索引，出现在「会话」标签页，下次以 `--session <path>` 打开。
 - 代价：Bot 会话不再出现在终端 `pi -r` / `pi -c` 的列表里；需要时 `pi --session <path>` 直接打开。
+
+### 4.5B 只有 Bot（V17）
+
+- 没有普通会话。侧栏就是 Bot 列表；`+` 新建 Bot（名字必填，工作目录默认上次用的）。不再有「设为 Bot / 取消 Bot」，也没有 Bot 删除接口。
+- **助手**：固定 id `pm-assistant`，首次启动自动建（`ensureAssistant`，幂等），cwd = `PIMU_WORKDIRS` 第一个；可改名，不能归档/删除。
+- **Bot id = 当前对话的 pi 会话 id**。这样 store、任务、目标、后台任务、审批全都不用改：它们一直挂在 Bot id 上。
+- **新话题**（`hub.NewTopic`）：拿会话锁（空闲进程先关；回复中 → 409；终端占用 → 409），把当前文件的 header `id` 改成新 id 并改名（保留 mtime），这就是归档。下一条消息 `pi --session-id <bot-id> --session-dir <bot dir>` 自然新建文件。
+- **历史话题** = Bot 目录里除当前外的文件，按 mtime 倒序。打开只读（prompt 409）；**继续这个话题**（`hub.ResumeTopic`）先归档当前（没有文件就跳过），再把话题文件的 id 改回 Bot id。两步都在 `topicMu` 下、持锁进行，完成后在该 Bot 的 SSE 发 `{"type":"resync"}`，前端重连并重新拉消息。
+- 改 header id 是 Pimu 第二处写会话文件（另一处是迁移）；只动首行 `id` 和文件名，内容不动。写法：tmp + fsync + rename。
+- **迁移旧的普通会话**（`cmd/pimu/botonly.go`）：V17 第一次启动时列出普通会话（不在 Bot 目录、不是 `pimu-[tgj]*`、不是 Bot）写进 `<data>/migrate-plain.json`；启动时和每分钟按清单 `hub.MoveInto(助手, id)`：复制进助手目录 + 原文件改名 `*.pimu-moved`，id 不变，所以 header 里的 cwd 留着——hub 用 header cwd 启动 pi，继续时就在原来的目录里跑（pi 支持每个会话自己的 cwd）。终端正占用的跳过，下一分钟重试，做完从清单里删掉。清单之后新出现的终端会话不动，所以只迁移一次。
+- 已知代价：改 Bot 的工作目录只对之后的新话题生效；已有对话按文件里记的 cwd 跑。
 
 ### 4.6 鉴权与安全
 
