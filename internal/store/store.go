@@ -292,6 +292,10 @@ type Bot struct {
 	CreatedAt   string `json:"createdAt"`
 }
 
+// AssistantID is the built-in 助手 bot: created on first start, cannot be
+// deleted or archived, can be renamed.
+const AssistantID = "pm-assistant"
+
 // Bot safety modes (docs/HISTORY.md).
 const (
 	ModeTrusted = "trusted"
@@ -368,16 +372,4 @@ func botMode(m string) string {
 		return m
 	}
 	return ModeTrusted
-}
-
-// DeleteBot drops the bot metadata only; the pi session file is untouched.
-func (s *Store) DeleteBot(id string) error {
-	res, err := s.db.Exec(`DELETE FROM bots WHERE session_id=?`, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
 }

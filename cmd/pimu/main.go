@@ -92,6 +92,12 @@ func serve() error {
 	}
 	defer st.Close()
 	h := hub.New(cfg)
+	if err := ensureAssistant(st, cfg); err != nil {
+		return fmt.Errorf("assistant bot: %w", err)
+	}
+	if err := planMigration(cfg, st, h); err != nil {
+		return fmt.Errorf("plan migration: %w", err)
+	}
 	// A bot is a pi session; its persona rides on --append-system-prompt and
 	// its name on --name until pi has recorded it.
 	tg := notify.Telegram{Token: cfg.TGToken, ChatID: cfg.TGChatID}
@@ -151,7 +157,7 @@ func serve() error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	go h.Reap(ctx)
-	go moveBotSessions(ctx, st, h)
+	go sweep(ctx, cfg, st, h)
 	if err := tk.Start(ctx); err != nil {
 		return fmt.Errorf("tasks: %w", err)
 	}
@@ -173,31 +179,6 @@ func serve() error {
 	tk.Stop()
 	h.Shutdown()
 	return nil
-}
-
-// moveBotSessions moves bot session files into the bots dir at start and then
-// every minute, which picks up bots that were busy (streaming, or open in
-// a terminal pi) the last time.
-func moveBotSessions(ctx context.Context, st *store.Store, h *hub.Hub) {
-	t := time.NewTicker(time.Minute)
-	defer t.Stop()
-	for {
-		bots, err := st.Bots()
-		if err != nil {
-			slog.Error("bot sessions", "err", err)
-		}
-		for _, b := range bots {
-			// Busy (streaming, or a terminal pi holds it): next round.
-			if _, err := h.MoveToBotDir(b.SessionID); err != nil && !errors.Is(err, hub.ErrStreaming) && !errors.Is(err, hub.ErrLocked) {
-				slog.Warn("move bot session", "session", b.SessionID, "err", err)
-			}
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
-	}
 }
 
 // release asks the running server to free a session.

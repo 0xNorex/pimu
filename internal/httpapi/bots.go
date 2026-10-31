@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -95,40 +94,15 @@ func (s *Server) validBot(b *store.Bot) string {
 	return ""
 }
 
-// handleBotCreate makes a new bot (every field optional) (a fresh pi session id, started lazily on
-// the first message) or adopts an existing session when sessionId is given.
+// handleBotCreate makes a new bot: a fresh pi session id, started lazily on
+// the first message. The name is required; the cwd defaults to the first
+// workdir.
 func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		store.Bot
-		Adopt string `json:"sessionId"`
-	}
-	if !readJSON(w, r, &body) {
+	var b store.Bot
+	if !readJSON(w, r, &b) {
 		return
 	}
-	b := body.Bot
 	b.SessionID = hub.NewID()
-	if body.Adopt != "" {
-		info, ok := s.hub.Idx.Find(body.Adopt)
-		if !ok { // a new Pimu session that has no file yet
-			cwd, known := s.hub.Known()[body.Adopt]
-			if !known {
-				writeErr(w, 404, "not_found", "会话不存在")
-				return
-			}
-			info.ID, info.Cwd = body.Adopt, cwd
-		}
-		b.SessionID, b.Cwd = info.ID, info.Cwd
-		if strings.TrimSpace(b.Name) == "" { // default: the session's title or first message
-			b.Name = strings.TrimSpace(clipRunes(firstNonEmpty(info.Name, info.Preview), 20))
-		}
-	}
-	if strings.TrimSpace(b.Name) == "" { // nothing to fill in: auto-name
-		n := 1
-		if all, err := s.st.Bots(); err == nil {
-			n = len(all) + 1
-		}
-		b.Name = fmt.Sprintf("助手 %d", n)
-	}
 	if b.Cwd == "" && len(s.cfg.Workdirs) > 0 {
 		b.Cwd = s.cfg.Workdirs[0]
 	}
@@ -142,41 +116,7 @@ func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 		s.botErr(w, err)
 		return
 	}
-	// Into the bots dir now if idle; a busy session is moved by the periodic sweep.
-	if _, err := s.hub.MoveToBotDir(b.SessionID); err != nil {
-		slog.Info("bot session not moved yet", "session", b.SessionID, "err", err)
-	}
 	writeJSON(w, 200, map[string]any{"bot": s.botOut(b, s.infos())})
-}
-
-// handleBotDelete unsets a bot: the pi session and its files stay, only the
-// bot metadata (name, persona, goals) is dropped.
-func (s *Server) handleBotDelete(w http.ResponseWriter, r *http.Request) {
-	id := r.PathValue("id")
-	if err := s.st.DeleteBot(id); err != nil {
-		s.botErr(w, err)
-		return
-	}
-	if run := s.hub.Running(id); run != nil && !run.Streaming() {
-		s.hub.Release(r.Context(), id) // drop the persona on next start
-	}
-	writeJSON(w, 200, map[string]bool{"ok": true})
-}
-
-func clipRunes(s string, n int) string {
-	if r := []rune(s); len(r) > n {
-		return string(r[:n])
-	}
-	return s
-}
-
-func firstNonEmpty(a ...string) string {
-	for _, s := range a {
-		if strings.TrimSpace(s) != "" {
-			return s
-		}
-	}
-	return ""
 }
 
 // handleBotPatch overlays the body. A new name reaches pi now if it is running
@@ -194,6 +134,10 @@ func (s *Server) handleBotPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b.SessionID = old.SessionID
+	if b.SessionID == store.AssistantID && b.Archived {
+		writeErr(w, 400, "invalid", "默认助手不能归档")
+		return
+	}
 	if msg := s.validBot(&b); msg != "" {
 		writeErr(w, 400, "invalid", msg)
 		return
@@ -227,7 +171,7 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		cwd = b.Cwd
 	} else if info, ok := s.hub.Idx.Find(id); ok {
 		cwd = info.Cwd
-	} else if c, ok := s.hub.Known()[id]; ok {
+	} else if c, ok := s.known(id); ok {
 		cwd = c
 	} else {
 		writeErr(w, 404, "not_found", "会话不存在")
@@ -271,4 +215,77 @@ func (s *Server) handleUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, 200, map[string]any{"path": path, "name": hdr.Filename, "size": n})
+}
+
+type topicOut struct {
+	ID        string    `json:"id"`
+	Title     string    `json:"title"`
+	Cwd       string    `json:"cwd"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// handleTopicList lists the bot's earlier conversations (详情 → 历史).
+func (s *Server) handleTopicList(w http.ResponseWriter, r *http.Request) {
+	b, err := s.st.Bot(r.PathValue("id"))
+	if err != nil {
+		s.botErr(w, err)
+		return
+	}
+	out := []topicOut{}
+	for _, i := range s.hub.Topics(b.SessionID) {
+		title := strings.TrimSpace(i.Preview)
+		if title == "" || (i.Name != "" && i.Name != b.Name) {
+			title = firstNonEmpty(i.Name, title, "（空对话）")
+		}
+		if r := []rune(title); len(r) > 60 {
+			title = string(r[:60]) + "…"
+		}
+		out = append(out, topicOut{ID: i.ID, Title: title, Cwd: i.Cwd, UpdatedAt: i.UpdatedAt})
+	}
+	writeJSON(w, 200, map[string]any{"topics": out})
+}
+
+// handleTopicNew starts a new topic: the current conversation moves to the
+// history and the next message starts a fresh pi session (empty context).
+func (s *Server) handleTopicNew(w http.ResponseWriter, r *http.Request) {
+	b, err := s.st.Bot(r.PathValue("id"))
+	if err != nil {
+		s.botErr(w, err)
+		return
+	}
+	s.topicResult(w, s.hub.NewTopic(r.Context(), b.SessionID))
+}
+
+// handleTopicResume makes an earlier topic current again (继续这个话题).
+func (s *Server) handleTopicResume(w http.ResponseWriter, r *http.Request) {
+	b, err := s.st.Bot(r.PathValue("id"))
+	if err != nil {
+		s.botErr(w, err)
+		return
+	}
+	s.topicResult(w, s.hub.ResumeTopic(r.Context(), b.SessionID, r.PathValue("topic")))
+}
+
+func (s *Server) topicResult(w http.ResponseWriter, err error) {
+	switch {
+	case err == nil:
+		writeJSON(w, 200, map[string]bool{"ok": true})
+	case errors.Is(err, hub.ErrStreaming):
+		writeErr(w, 409, "busy", "它还在回复，等这一轮结束再换话题")
+	case errors.Is(err, hub.ErrLocked):
+		writeErr(w, 409, "locked", "这个对话正在终端里打开，先在终端退出 pi")
+	case errors.Is(err, hub.ErrNotFound):
+		writeErr(w, 404, "not_found", "话题不存在")
+	default:
+		writeErr(w, 500, "io_error", err.Error())
+	}
+}
+
+func firstNonEmpty(a ...string) string {
+	for _, s := range a {
+		if strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return ""
 }

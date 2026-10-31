@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -57,5 +58,49 @@ func TestMoveToBotDirKeepsHistoryAndBackup(t *testing.T) {
 	}
 	if moved, err := h.MoveToBotDir("pm-b1"); moved || err != nil {
 		t.Fatalf("second move: %v %v", moved, err)
+	}
+}
+
+func TestNewTopicAndResume(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := &config.Config{PiBin: os.Args[0], AgentDir: filepath.Join(tmp, "agent"), SessionDir: filepath.Join(tmp, "sessions"), DataDir: filepath.Join(tmp, "data"), MaxProcs: 2, IdleTimeout: time.Minute}
+	h := New(cfg)
+	dir := h.BotSessionDir("pm-bot")
+	os.MkdirAll(dir, 0o700)
+	cur := filepath.Join(dir, "2026-01-01T00-00-00_pm-bot.jsonl")
+	body := `{"type":"session","version":3,"id":"pm-bot","cwd":"/work"}` + "\n" + `{"type":"message","message":{"role":"user","content":"first topic"}}` + "\n"
+	os.WriteFile(cur, []byte(body), 0o600)
+
+	if err := h.NewTopic(context.Background(), "pm-bot"); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := h.Idx.Find("pm-bot"); ok {
+		t.Fatal("current conversation still there")
+	}
+	tops := h.Topics("pm-bot")
+	if len(tops) != 1 || tops[0].Preview != "first topic" || tops[0].Cwd != "/work" || !h.IsTopic(tops[0].ID) {
+		t.Fatalf("topics: %+v", tops)
+	}
+	old := tops[0].ID
+	if err := h.NewTopic(context.Background(), "pm-bot"); err != nil { // nothing to archive
+		t.Fatal(err)
+	}
+
+	// A second conversation, then resume the first.
+	os.WriteFile(filepath.Join(dir, "2026-01-02T00-00-00_pm-bot.jsonl"), []byte(`{"type":"session","version":3,"id":"pm-bot","cwd":"/work"}`+"\n"+`{"type":"message","message":{"role":"user","content":"second"}}`+"\n"), 0o600)
+	if err := h.ResumeTopic(context.Background(), "pm-bot", old); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := h.Idx.Find("pm-bot"); !ok || s.Preview != "first topic" || h.IsTopic("pm-bot") {
+		t.Fatalf("resumed: %+v %v", s, ok)
+	}
+	if b, _ := os.ReadFile(cur); string(b) != body {
+		t.Fatalf("resumed file differs: %q", b)
+	}
+	if tops := h.Topics("pm-bot"); len(tops) != 1 || tops[0].Preview != "second" {
+		t.Fatalf("after resume: %+v", tops)
+	}
+	if err := h.ResumeTopic(context.Background(), "pm-bot", "pm-nope"); err != ErrNotFound {
+		t.Fatalf("unknown topic: %v", err)
 	}
 }

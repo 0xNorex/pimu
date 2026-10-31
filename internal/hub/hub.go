@@ -90,6 +90,8 @@ type Hub struct {
 	// Global carries cross-session events (proc_state with id, run_update) for /api/events.
 	Global *Stream
 
+	topicMu sync.Mutex // new topic / resume
+
 	modelsMu sync.Mutex
 	models   json.RawMessage
 	modelsAt time.Time
@@ -146,11 +148,6 @@ func NewID() string {
 	b := make([]byte, 6)
 	_, _ = rand.Read(b)
 	return "pm-" + hex.EncodeToString(b)
-}
-
-// Create starts a new pi session in cwd and returns its id.
-func (h *Hub) Create(ctx context.Context, cwd string) (*Run, error) {
-	return h.CreateWithID(ctx, NewID(), cwd)
 }
 
 // CreateWithID starts a brand-new session with a caller-chosen id (task runs).

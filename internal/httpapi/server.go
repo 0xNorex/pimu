@@ -65,8 +65,6 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("GET /api/dirs", s.handleDirs)
 	api.HandleFunc("POST /api/dirs", s.handleMkdir)
 	api.HandleFunc("GET /api/models", s.handleModels)
-	api.HandleFunc("GET /api/sessions", s.handleList)
-	api.HandleFunc("POST /api/sessions", s.handleCreate)
 	api.HandleFunc("GET /api/sessions/{id}", s.handleGet)
 	api.HandleFunc("GET /api/sessions/{id}/messages", s.handleMessages)
 	api.HandleFunc("GET /api/sessions/{id}/events", s.handleEvents)
@@ -82,7 +80,9 @@ func (s *Server) Handler(static fs.FS) http.Handler {
 	api.HandleFunc("POST /api/bots", s.handleBotCreate)
 	api.HandleFunc("GET /api/bots/{id}", s.handleBotGet)
 	api.HandleFunc("PATCH /api/bots/{id}", s.handleBotPatch)
-	api.HandleFunc("DELETE /api/bots/{id}", s.handleBotDelete)
+	api.HandleFunc("GET /api/bots/{id}/topics", s.handleTopicList)
+	api.HandleFunc("POST /api/bots/{id}/topics", s.handleTopicNew)
+	api.HandleFunc("POST /api/bots/{id}/topics/{topic}/resume", s.handleTopicResume)
 	api.HandleFunc("POST /api/sessions/{id}/files", s.handleUpload)
 	api.HandleFunc("GET /api/events", s.handleGlobalEvents)
 	api.HandleFunc("GET /api/tasks", s.handleTaskList)
@@ -146,58 +146,17 @@ func (s *Server) handleModels(w http.ResponseWriter, r *http.Request) {
 	writeRaw(w, data)
 }
 
-type sessionOut struct {
-	sessions.Info
-	Status string `json:"status"`
-}
-
-func (s *Server) handleList(w http.ResponseWriter, r *http.Request) {
-	list := s.hub.Idx.List()
-	out := make([]sessionOut, 0, len(list))
-	seen := map[string]bool{}
-	for id, cwd := range s.hub.Known() { // started here, no file yet
-		if _, ok := s.hub.Idx.Find(id); !ok && s.hub.Running(id) != nil {
-			out = append(out, sessionOut{Info: sessions.Info{ID: id, Cwd: cwd, UpdatedAt: time.Now()}, Status: s.hub.Status(id)})
-			seen[id] = true
-		}
+// known: a session that has no file yet — a task run started here, or a bot
+// before its first message (also right after 新话题). The cwd is where it
+// starts.
+func (s *Server) known(id string) (string, bool) {
+	if cwd, ok := s.hub.Known()[id]; ok {
+		return cwd, true
 	}
-	for _, info := range list {
-		if !seen[info.ID] {
-			out = append(out, sessionOut{Info: info, Status: s.hub.Status(info.ID)})
-		}
+	if b, err := s.st.Bot(id); err == nil {
+		return b.Cwd, true
 	}
-	writeJSON(w, 200, map[string]any{"sessions": out})
-}
-
-func (s *Server) handleCreate(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		Cwd      string `json:"cwd"`
-		Provider string `json:"provider"`
-		ModelID  string `json:"modelId"`
-		Thinking string `json:"thinking"`
-	}
-	if !readJSON(w, r, &body) {
-		return
-	}
-	cwd, ok := s.cfg.AllowedDir(body.Cwd)
-	if !ok {
-		writeErr(w, 400, "bad_cwd", s.cwdErr(body.Cwd))
-		return
-	}
-	run, err := s.hub.Create(r.Context(), cwd)
-	if err != nil {
-		s.hubErr(w, err)
-		return
-	}
-	if body.Provider != "" && body.ModelID != "" {
-		if resp, err := s.hub.Call(r.Context(), run, map[string]any{"type": "set_model", "provider": body.Provider, "modelId": body.ModelID}, 30*time.Second); err != nil || !resp.Success {
-			slog.Warn("set_model on create failed", "session", run.ID, "err", err, "pi", resp.Error)
-		}
-	}
-	if body.Thinking != "" {
-		_, _ = s.hub.Call(r.Context(), run, map[string]any{"type": "set_thinking_level", "level": body.Thinking}, 30*time.Second)
-	}
-	writeJSON(w, 200, map[string]string{"id": run.ID})
+	return "", false
 }
 
 func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +164,7 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"id": id, "status": s.hub.Status(id)}
 	if info, ok := s.hub.Idx.Find(id); ok {
 		out["path"], out["cwd"], out["name"], out["updatedAt"] = info.Path, info.Cwd, info.Name, info.UpdatedAt
-	} else if cwd, ok := s.hub.Known()[id]; ok {
+	} else if cwd, ok := s.known(id); ok {
 		out["cwd"] = cwd
 	} else {
 		writeErr(w, 404, "not_found", "会话不存在")
@@ -253,7 +212,7 @@ func (s *Server) handleMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		msgs = m
-	} else if _, ok := s.hub.Known()[id]; !ok {
+	} else if _, ok := s.known(id); !ok {
 		writeErr(w, 404, "not_found", "会话不存在")
 		return
 	}
@@ -271,6 +230,10 @@ func (s *Server) handlePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(body.Message) == "" {
 		writeErr(w, 400, "empty", "消息为空")
+		return
+	}
+	if s.hub.IsTopic(r.PathValue("id")) {
+		writeErr(w, 409, "topic", "这是以前的话题，先点「继续这个话题」")
 		return
 	}
 	run, err := s.hub.Ensure(r.Context(), r.PathValue("id"))
