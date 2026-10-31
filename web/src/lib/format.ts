@@ -1,6 +1,7 @@
 import type { Message, ToolCallBlock } from './types'
 
 export function textOf(m: Message): string {
+  if (m.role === 'compactionSummary') return ''
   if (typeof m.content === 'string') return m.content
   return m.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
 }

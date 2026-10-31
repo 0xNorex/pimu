@@ -58,7 +58,7 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
       <DialogContent className="max-h-[90dvh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{edit ? '编辑 Bot' : '设为 Bot'}</DialogTitle>
-          <DialogDescription>{edit ? '人设修改后从下一条消息起生效。' : 'Bot 就是一个长期的会话：置顶、有头像，可以加人设和后台目标。名字可留空，默认用会话标题。'}</DialogDescription>
+          <DialogDescription>{edit ? '人设修改后从下一条消息起生效。' : '给它起个名字，它会一直在列表里。'}</DialogDescription>
         </DialogHeader>
         <form
           className="grid gap-4"
@@ -82,12 +82,12 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
             <Textarea id="bot-persona" value={f.persona} onChange={(e) => set('persona', e.target.value)} rows={5} placeholder="它是谁、怎么说话、要遵守什么" className="text-base" />
           </div>
           <div className="grid gap-2">
-            <Label>安全模式</Label>
+            <Label>做事方式</Label>
             <div role="radiogroup" className="grid grid-cols-2 gap-2">
               {(
                 [
-                  ['trusted', 'Trusted · 原生', '原生 Pi 行为（默认），不拦截工具调用'],
-                  ['guarded', 'Guarded · 门控', 'L2 门控：越界的写入和命令先在对话里等你批准'],
+                  ['trusted', '直接做', '默认：不打断你'],
+                  ['guarded', '先问我', '改文件、跑命令前先在对话里问你'],
                 ] as const
               ).map(([v, label, hint]) => (
                 <button
@@ -103,7 +103,7 @@ export function BotDialog({ open, onOpenChange, bot, adopt, onSaved }: Props) {
                 </button>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">两种模式都不是系统沙箱：L2 是应用层门控，Pi 仍有本机用户的权限。切换在空闲时立刻生效，正在回复时从下一次启动生效。</p>
+            <p className="text-xs text-muted-foreground">这不是系统沙箱，它仍有本机用户的权限。</p>
           </div>
           <Collapsible>
             <CollapsibleTrigger type="button" className="group flex min-h-11 items-center gap-1 text-sm text-muted-foreground">

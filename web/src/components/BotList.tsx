@@ -15,7 +15,7 @@ import type { Bot, InboxItem, SessionSummary, TaskRun } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
 import { isDark, reveal } from '@/lib/prefs'
 import { BotAvatar } from './BotAvatar'
-import { openNewSession } from './NewSessionDialog'
+import { quickNewSession } from './NewSessionDialog'
 
 // Task runs (pimu-t…), heartbeats (pimu-g…) and background jobs (pimu-j…) live under their task/goal/bot, not here.
 const isBackground = (id: string) => /^pimu-[tgj]\d/.test(id)
@@ -45,7 +45,6 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
   const [dirs, setDirs] = useState<{ workdirs: string[]; home: string }>({ workdirs: [], home: '' })
   const [more, setMore] = useState<Record<string, boolean>>({})
   const [unread, setUnread] = useState(0)
-  const [bump, setBump] = useState<Tab | null>(null)
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({ bots: null, sessions: null })
 
   const setTab = (t: Tab) => {
@@ -119,8 +118,6 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
             }),
           'move',
           )
-          setBump(to)
-          setTimeout(() => setBump(null), 700)
         })
         .catch(() => {})
     }
@@ -189,12 +186,12 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           </div>
           <div className="flex items-center gap-2">
             <span className={`min-w-0 flex-1 truncate text-sm ${un ? 'text-foreground' : 'text-muted-foreground'}`}>
-              {b.status === 'streaming' ? <span className="shimmer">正在回复…</span> : b.jobsRunning ? <span className="shimmer">后台任务进行中{b.jobsRunning > 1 ? ` · ${b.jobsRunning}` : ''}</span> : b.last ? `${b.lastRole === 'user' ? '我：' : ''}${plain(b.last)}` : b.description || '还没有对话'}
+              {b.status === 'streaming' ? <span className="shimmer">正在回复…</span> : b.jobsRunning ? <span className="shimmer">在后台做事…</span> : b.last ? `${b.lastRole === 'user' ? '我：' : ''}${plain(b.last)}` : b.description || '还没有对话'}
             </span>
             {wait > 0 ? (
-              <span className="attention inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400" title={`${wait} 个审批等你处理`}>
+              <span className="attention inline-flex h-5 shrink-0 items-center gap-1 rounded-full bg-amber-500/15 px-1.5 text-[11px] font-medium text-amber-700 dark:text-amber-400" title="等你确认">
                 <ShieldAlertIcon className="size-3" />
-                待批准{wait > 1 ? ` ${wait}` : ''}
+                等你确认
               </span>
             ) : working ? (
               <span className="sr-only">运行中</span>
@@ -270,7 +267,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         <p className="font-heading text-base font-semibold">还没有 Bot</p>
         <p className="mt-1.5 max-w-64 text-sm text-pretty text-muted-foreground">Bot 是常驻的会话：有名字和人设，能定时干活、需要时找你审批。</p>
         <ol className="mt-4 w-full max-w-64 space-y-1.5 rounded-xl border bg-card/60 p-3 text-left text-[13px] text-muted-foreground">
-          {['打开任一会话', '点右上角 ⋯', '选「设为 Bot」'].map((t, i) => (
+          {['打开任一会话', '点顶部的名字', '选「设为 Bot」'].map((t, i) => (
             <li key={t} className="flex items-center gap-2">
               <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/12 text-[11px] font-semibold text-primary tabular-nums">{i + 1}</span>
               {t}
@@ -281,7 +278,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           <Button variant="outline" className="h-11 lg:h-9" onClick={() => setTab('sessions')}>
             去「会话」挑一个
           </Button>
-          <Button className="h-11 lg:h-9" onClick={() => openNewSession()}>
+          <Button className="h-11 lg:h-9" onClick={() => void quickNewSession()}>
             <PlusIcon /> 新会话
           </Button>
         </div>
@@ -328,7 +325,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         </span>
         <p className="font-heading text-base font-semibold">还没有会话</p>
         <p className="mt-1.5 max-w-64 text-sm text-muted-foreground">选个工作目录开聊；常用的可以设为 Bot，放到「Bot」标签页。</p>
-        <Button className="mt-5 h-11 lg:h-9" onClick={() => openNewSession()}>
+        <Button className="mt-5 h-11 lg:h-9" onClick={() => void quickNewSession()}>
           <PlusIcon /> 新会话
         </Button>
       </div>
@@ -341,13 +338,12 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
               <h2 className="group/dir flex h-8 items-center gap-1.5 pr-2 pl-4 text-xs font-medium text-muted-foreground" title={g.cwd}>
                 <FolderIcon className="size-3.5 shrink-0 opacity-70" />
                 <span className="min-w-0 flex-1 truncate">{dirLabel(g.cwd)}</span>
-                {g.list.length > 1 && <span className="tabular-nums opacity-60 group-hover/dir:hidden">{g.list.length}</span>}
                 <button
                   type="button"
                   className="hidden size-7 items-center justify-center rounded-md hover:bg-foreground/[0.06] hover:text-foreground focus-visible:flex focus-visible:ring-2 focus-visible:ring-ring group-hover/dir:flex outline-none"
                   aria-label={`在 ${dirLabel(g.cwd)} 新建会话`}
                   title="在这个目录新建会话"
-                  onClick={() => openNewSession(g.cwd)}
+                  onClick={() => void quickNewSession(g.cwd)}
                 >
                   <PlusIcon className="size-3.5" />
                 </button>
@@ -372,7 +368,6 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
     setTab(t)
     tabRefs.current[t]?.focus()
   }
-  const count = (t: Tab) => (t === 'bots' ? (unreadBots > 0 && tab !== 'bots' ? unreadBots : nBots) : nSessions)
 
   return (
     <div className="flex h-full flex-col">
@@ -384,10 +379,10 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         <Button asChild size="icon" variant={route === 'inbox' ? 'secondary' : 'ghost'} className="relative size-11 lg:size-9">
           <a href="#/inbox" aria-label={unread ? `收件箱（${unread} 条未读）` : '收件箱'} title="收件箱">
             <BellIcon className={unread > 0 ? 'bell-ring' : ''} />
-            {unread > 0 && <span className="dot-in absolute top-1 right-1 min-w-4 rounded-full bg-primary px-1 text-center text-[10px] leading-4 font-semibold text-primary-foreground tabular-nums">{unread > 99 ? '99+' : unread}</span>}
+            {unread > 0 && <span className="dot-in absolute top-2 right-2 size-2 rounded-full bg-primary" aria-hidden />}
           </a>
         </Button>
-        <Button size="icon" variant="ghost" className="size-11 lg:size-9" aria-label="新会话" title="新会话" onClick={() => openNewSession()}>
+        <Button size="icon" variant="ghost" className="size-11 lg:size-9" aria-label="新会话" title="新会话" onClick={() => void quickNewSession()}>
           <SquarePenIcon />
         </Button>
       </header>
@@ -395,7 +390,6 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
         <span aria-hidden className="seg-pill absolute inset-y-[3px] left-[3px] w-[calc(50%-3px)] rounded-lg bg-background shadow-[0_1px_2px_oklch(0_0_0/10%),0_2px_8px_-2px_oklch(0_0_0/10%)] dark:bg-foreground/[0.11]" style={{ transform: tab === 'sessions' ? 'translateX(100%)' : undefined }} />
         {TABS.map(([t, label]) => {
           const on = tab === t
-          const c = count(t)
           const hot = t === 'bots' && tab !== 'bots' && unreadBots > 0
           return (
             <button
@@ -411,11 +405,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
               className={`relative z-10 flex h-10 items-center justify-center gap-1.5 rounded-lg text-sm font-medium outline-none transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-ring lg:h-8 ${on ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
             >
               {label}
-              {(bots !== null || t === 'sessions') && c > 0 && (
-                <span key={`${c}-${bump === t}`} className={`min-w-[1.25rem] rounded-full px-1.5 text-[11px] leading-[18px] tabular-nums ${hot ? 'bg-primary text-primary-foreground' : 'bg-foreground/[0.07] text-muted-foreground'} ${bump === t ? 'count-bump' : ''}`}>
-                  {c > 99 ? '99+' : c}
-                </span>
-              )}
+              {hot && <span className="dot-in size-2 rounded-full bg-primary" aria-label="有新消息" />}
             </button>
           )
         })}
@@ -434,9 +424,7 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
           <button type="button" aria-label="清除搜索" onClick={() => setQ('')} className="absolute top-1/2 right-4 flex size-8 -translate-y-[calc(50%+4px)] items-center justify-center rounded-md text-muted-foreground hover:text-foreground">
             <XIcon className="size-4" />
           </button>
-        ) : (
-          <kbd className="pointer-events-none absolute top-1/2 right-6 hidden -translate-y-[calc(50%+4px)] rounded border px-1.5 font-mono text-[10px] text-muted-foreground lg:block">⌘K</kbd>
-        )}
+        ) : null}
       </div>
       <ScrollArea className="flex-1">
         <nav id="sidebar-panel" role="tabpanel" aria-labelledby={`tab-${tab}`} key={tab} className={`pt-1 pb-3 ${dir === null ? 'no-anim' : dir === 'r' ? 'panel-in-r' : 'panel-in-l'}`}>
@@ -446,7 +434,6 @@ export function BotList({ activeId, route }: { activeId?: string; route: Route['
       <footer className="flex shrink-0 gap-1 border-t px-2 py-1.5 pb-[max(env(safe-area-inset-bottom),0.375rem)]">
         {(
           [
-            ['#/tasks', '任务', CalendarClockIcon, route === 'tasks' || route === 'task'],
             ['#/settings', '设置', SettingsIcon, route === 'settings'],
           ] as const
         ).map(([href, label, Icon, on]) => (

@@ -12,14 +12,14 @@ import { Switch } from '@/components/ui/switch'
 import { api, ApiError, errMsg } from '@/lib/api'
 import { go } from '@/lib/route'
 import { AppearanceSection } from './AppearanceSection'
-import type { Goal, Model } from '@/lib/types'
+import type { Bot, Goal, Model } from '@/lib/types'
 import { every } from '@/lib/format'
 import { MemoryEditor } from './MemoryEditor'
 import { THINKING, useModels } from './ModelPicker'
 import { PageHeader } from './PageHeader'
 import type { AuthStatus } from './LoginPage'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { SECTIONS, type Section } from '@/lib/sections'
+import { ADVANCED, SECTIONS, type Section } from '@/lib/sections'
 
 
 type Ext = { name: string; path?: string; builtin: boolean; enabled: boolean }
@@ -74,6 +74,7 @@ function Row({ title, sub, right, onClick }: { title: ReactNode; sub?: ReactNode
 const Mono = ({ children }: { children: ReactNode }) => <span className="font-mono text-[11.5px]">{children}</span>
 
 export function SettingsPage({ section }: { section: Section }) {
+  const label = SECTIONS.find(([k]) => k === section)?.[1] ?? '设置'
   const [s, setS] = useState<Settings | null>(null)
   const load = useCallback(() => {
     api<Settings>('/api/settings').then(setS).catch((e) => toast.error(errMsg(e)))
@@ -95,23 +96,15 @@ export function SettingsPage({ section }: { section: Section }) {
 
   return (
     <main className="page-in flex min-w-0 flex-1 flex-col">
-      <PageHeader title="设置" back="#/" flush />
-      <nav className="flex h-9 gap-5 overflow-x-auto border-b px-3 [scrollbar-width:none] lg:px-4" aria-label="设置分区">
-        {SECTIONS.map(([k, label]) => (
-          <a
-            key={k}
-            href={`#/settings/${k}`}
-            aria-current={k === section ? 'page' : undefined}
-            className="relative flex shrink-0 items-center px-0.5 text-[13px] font-medium text-foreground/60 transition-colors after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-foreground after:opacity-0 hover:text-foreground focus-visible:text-foreground focus-visible:outline-none aria-[current=page]:text-foreground aria-[current=page]:after:opacity-100 dark:text-muted-foreground"
-          >
-            {label}
-          </a>
-        ))}
-      </nav>
+      <PageHeader title={label} back={section === 'home' ? '#/' : '#/settings'} backAlways={section !== 'home'} />
       <ScrollArea className="flex-1">
         <div key={section} className="msg-in mx-auto flex max-w-2xl flex-col gap-6 p-4 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
-          {section === 'appearance' ? (
+          {section === 'home' ? (
+            <HomeSection s={s} />
+          ) : section === 'appearance' ? (
             <AppearanceSection />
+          ) : section === 'botmode' ? (
+            <BotModeSection />
           ) : section === 'memory' ? (
             <MemoryEditor />
           ) : section === 'goals' ? (
@@ -377,6 +370,18 @@ function MCPSection({ s, patch }: P) {
 }
 
 function PimuSection({ s }: { s: Settings }) {
+  return (
+    <Group>
+      <Row title="Pimu" right={<Mono>{s.version}</Mono>} />
+      <Row title="pi" right={<Mono>{s.piVersion}</Mono>} />
+      <Row title="pi 配置目录" right={<Mono>{s.agentDir}</Mono>} />
+      {s.publicUrl && <Row title="访问地址" right={<Mono>{s.publicUrl}</Mono>} />}
+    </Group>
+  )
+}
+
+// The top level: three things a person changes, the rest folded under 高级.
+function HomeSection({ s }: { s: Settings | null }) {
   const [auth, setAuth] = useState<AuthStatus | null>(null)
   useEffect(() => {
     api<AuthStatus>('/api/auth/status').then(setAuth, () => {})
@@ -385,25 +390,63 @@ function PimuSection({ s }: { s: Settings }) {
     await api('/api/logout', {}).catch(() => {})
     go('#/login')
   }
+  // Coming back from an advanced page keeps 高级 open.
+  const adv = sessionStorage.getItem('pimu-adv') === '1'
+  const name = (k: Section) => SECTIONS.find(([x]) => x === k)?.[1]
   return (
     <>
-      <Group title="通知" hint="Telegram 由启动 Pimu 的环境变量 PIMU_TELEGRAM_TOKEN / PIMU_TELEGRAM_CHAT_ID 配置，只在任务完成或失败时提醒。">
-        <Row title="Telegram" right={s.telegram.configured ? <Badge variant="secondary" className="text-emerald-600 dark:text-emerald-400">已配置{s.telegram.chat ? ` · ${s.telegram.chat}` : ''}</Badge> : <Badge variant="outline">未配置</Badge>} />
-      </Group>
-      <Group title="关于">
-        <Row title="Pimu" right={<Mono>{s.version}</Mono>} />
-        <Row title="pi" right={<Mono>{s.piVersion}</Mono>} />
-        <Row title="pi 配置目录" right={<Mono>{s.agentDir}</Mono>} />
-        {s.publicUrl && <Row title="访问地址" right={<Mono>{s.publicUrl}</Mono>} />}
-        {auth?.via && <Row title="登录方式" right={<span className="text-sm text-muted-foreground">{auth.via === 'access' ? 'Cloudflare Access' : '访问令牌'}</span>} />}
+      <Group>
+        <Row title="外观" sub="浅色深色、配色、字号" onClick={() => go('#/settings/appearance')} />
+        <Row title="Bot 模式" sub="哪些 Bot 动手前先问你" onClick={() => go('#/settings/botmode')} />
+        <Row title="通知" sub={s?.telegram.configured ? 'Telegram 已连接，完成或出错时提醒你' : 'Telegram 未连接'} />
       </Group>
       {/* An Access session is Cloudflare's to end; logging out of Pimu would change nothing. */}
-      {auth?.via === 'token' && <Group>
-        <button type="button" onClick={() => void logout()} className="pressable flex min-h-12 w-full items-center justify-center gap-2 px-4 text-[15px] text-destructive hover:bg-destructive/5">
-          <LogOutIcon className="size-4" /> 退出登录
-        </button>
-      </Group>}
+      {auth?.via === 'token' && (
+        <Group>
+          <button type="button" onClick={() => void logout()} className="pressable flex min-h-12 w-full items-center justify-center gap-2 px-4 text-[15px] text-destructive hover:bg-destructive/5">
+            <LogOutIcon className="size-4" /> 退出登录
+          </button>
+        </Group>
+      )}
+      <details open={adv} className="group/adv" onToggle={(e) => sessionStorage.setItem('pimu-adv', e.currentTarget.open ? '1' : '0')}>
+        <summary className="pressable mx-auto flex h-10 w-fit cursor-pointer list-none items-center gap-1.5 rounded-full px-4 text-sm text-muted-foreground select-none hover:bg-foreground/[0.05] hover:text-foreground [&::-webkit-details-marker]:hidden">
+          高级 <ChevronRightIcon className="size-3.5 transition-transform group-open/adv:rotate-90" />
+        </summary>
+        <div className="mt-3">
+          <Group>
+            {ADVANCED.map((k) => (
+              <Row key={k} title={name(k)} onClick={() => go(`#/settings/${k}`)} />
+            ))}
+            <Row title="定时任务" onClick={() => go('#/tasks')} />
+          </Group>
+        </div>
+      </details>
     </>
+  )
+}
+
+// guarded = Pimu asks before the bot runs anything that changes things.
+function BotModeSection() {
+  const [bots, setBots] = useState<Bot[] | null>(null)
+  useEffect(() => void api<{ bots: Bot[] }>('/api/bots').then((r) => setBots(r.bots.filter((b) => !b.archived))).catch(() => {}), [])
+  const set = async (b: Bot, guarded: boolean) => {
+    const mode = guarded ? 'guarded' : 'trusted'
+    setBots((xs) => xs?.map((x) => (x.id === b.id ? { ...x, mode } : x)) ?? null)
+    try {
+      await api(`/api/bots/${b.id}`, { mode }, 'PATCH')
+    } catch (e) {
+      toast.error(errMsg(e))
+      setBots((xs) => xs?.map((x) => (x.id === b.id ? { ...x, mode: b.mode } : x)) ?? null)
+    }
+  }
+  return (
+    <Group title="操作前先问我" hint="打开后，它要运行命令、改文件或联网前会先在对话里问你，你点「允许」才做。">
+      {!bots && <Skeleton className="m-3 h-10" />}
+      {bots?.length === 0 && <Row title="还没有 Bot" />}
+      {bots?.map((b) => (
+        <Row key={b.id} title={b.name} right={<Switch checked={b.mode === 'guarded'} onCheckedChange={(v) => void set(b, v)} aria-label={`${b.name}：操作前先问我`} />} />
+      ))}
+    </Group>
   )
 }
 

@@ -26,6 +26,7 @@ export type Action =
   | { type: 'events'; events: Incoming[] }
   | { type: 'ui_done'; id: string }
   | { type: 'clear_exit' }
+  | { type: 'compacted' }
 
 export const initialStore: SessionStore = {
   loaded: false,
@@ -44,7 +45,7 @@ export const initialStore: SessionStore = {
 const DIALOGS = new Set(['select', 'confirm', 'input', 'editor'])
 
 function isChat(m: { role: string }): m is Message {
-  return m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult'
+  return m.role === 'user' || m.role === 'assistant' || m.role === 'toolResult' || m.role === 'compactionSummary'
 }
 
 // Replace a message already present (same role + timestamp) instead of duplicating it.
@@ -145,6 +146,8 @@ function apply(s: SessionStore, ev: Incoming): SessionStore {
         tools: { ...s.tools, [e.toolCallId]: { ...t, status: e.isError ? 'error' : 'ok', result: e.result, durationMs: e.durationMs } },
       }
     }
+    case 'auto_compaction_end':
+      return (e as { aborted?: boolean }).aborted ? s : { ...s, messages: [...s.messages, { role: 'compactionSummary', timestamp: Date.now() }] }
     case 'queue_update':
       return { ...s, queue: { steering: e.steering, followUp: e.followUp } }
     case 'extension_ui_request':
@@ -165,5 +168,7 @@ export function reducer(s: SessionStore, a: Action): SessionStore {
       return { ...s, uiRequests: s.uiRequests.filter((r) => r.id !== a.id) }
     case 'clear_exit':
       return { ...s, exit: null }
+    case 'compacted':
+      return { ...s, messages: [...s.messages, { role: 'compactionSummary', timestamp: Date.now() }] }
   }
 }

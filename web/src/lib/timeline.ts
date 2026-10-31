@@ -10,6 +10,12 @@ export type Item =
   | { kind: 'group'; key: string; tools: ToolView[] }
   | { kind: 'error'; key: string; text: string }
   | { kind: 'aborted'; key: string }
+  | { kind: 'compaction'; key: string }
+  | { kind: 'notice'; key: string; jobId: number; title: string; verb: string; body: string }
+
+// Pimu delivers a background job's result as a prompt (internal/jobs); it is
+// for the bot, so the chat shows a small card instead of a user bubble.
+const JOB = /^\[Pimu 后台任务 #(\d+)「([^」]*)」已(\S+?)\]\n\n([\s\S]*?)(?:\n\n\[Pimu\] approvals[\s\S]*)?$/
 
 // Flattens messages (+ streaming draft) into render items.
 function flatten(messages: Message[], draft: AssistantMessage | null, tools: Record<string, ToolState>, streaming: boolean): Item[] {
@@ -20,7 +26,17 @@ function flatten(messages: Message[], draft: AssistantMessage | null, tools: Rec
   const all = draft ? [...messages, draft] : messages
   all.forEach((m, mi) => {
     const k = `${mi}-${m.timestamp}`
+    if (m.role === 'compactionSummary') {
+      flat.push({ kind: 'compaction', key: k })
+      return
+    }
     if (m.role === 'user') {
+      const text = typeof m.content === 'string' ? m.content : m.content.map((b) => (b.type === 'text' ? b.text : '')).join('')
+      const j = JOB.exec(text)
+      if (j) {
+        flat.push({ kind: 'notice', key: k, jobId: Number(j[1]), title: j[2], verb: j[3], body: j[4].trim() })
+        return
+      }
       const blocks = typeof m.content === 'string' ? [{ type: 'text' as const, text: m.content }] : m.content
       flat.push({
         kind: 'user',
@@ -71,11 +87,4 @@ export function buildItems(messages: Message[], draft: AssistantMessage | null, 
     }
   }
   return out
-}
-
-// Tool activity for the Activity tab, newest first.
-export function toolActivity(messages: Message[], draft: AssistantMessage | null, tools: Record<string, ToolState>, streaming: boolean) {
-  return flatten(messages, draft, tools, streaming)
-    .flatMap((it) => (it.kind === "tool" ? [{ tool: it.tool, ts: it.ts }] : []))
-    .reverse()
 }

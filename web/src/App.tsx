@@ -3,7 +3,7 @@ import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react'
 import { LoginPage } from '@/components/LoginPage'
 import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
-import { NewSessionDialog, openNewSession } from '@/components/NewSessionDialog'
+import { NewSessionDialog, quickNewSession } from '@/components/NewSessionDialog'
 import { SquarePenIcon } from 'lucide-react'
 import { SECTIONS, type Section } from '@/lib/sections'
 
@@ -54,7 +54,7 @@ export default function App() {
     ) : route.name === 'task' ? (
       <TaskDetail key={route.id} id={route.id} bot={route.bot} />
     ) : route.name === 'settings' ? (
-      <SettingsPage section={(SECTIONS.some(([k]) => k === route.section) ? route.section : 'appearance') as Section} />
+      <SettingsPage section={(SECTIONS.some(([k]) => k === route.section) ? route.section : 'home') as Section} />
     ) : null
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
@@ -72,7 +72,7 @@ export default function App() {
               <p className="mt-1">从左边选一个 Bot 或会话</p>
               <div className="mt-5 flex items-center gap-4 text-xs">
                 <span className="flex items-center gap-1.5"><kbd className="rounded border bg-card px-1.5 py-0.5 font-mono text-[11px]">⌘K</kbd> 搜索</span>
-                <button type="button" className="pressable flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-foreground/[0.05] hover:text-foreground" onClick={() => openNewSession()}>
+                <button type="button" className="pressable flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-foreground/[0.05] hover:text-foreground" onClick={() => void quickNewSession()}>
                   <SquarePenIcon className="size-3.5" /> 新会话
                 </button>
               </div>

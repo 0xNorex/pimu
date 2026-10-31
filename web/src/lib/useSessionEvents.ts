@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type Dispatch } from 'react'
-import { toast } from 'sonner'
 import { api } from './api'
 import type { Action } from './store'
 import type { Incoming, Message, PiEvent, PimuEvent, SessionDetail } from './types'
@@ -48,11 +47,7 @@ export function useSessionEvents(id: string, dispatch: Dispatch<Action>, onDetai
         }
         es.addEventListener('pi', (m) => {
           const data = JSON.parse(m.data) as PiEvent
-          // Extensions chatter ("… loaded") at info level; only warnings and errors
-          // reach the user, once per distinct message.
-          if (data.type === 'extension_ui_request' && data.method === 'notify' && data.message && (data.notifyType === 'error' || data.notifyType === 'warning')) {
-            ;(data.notifyType === 'error' ? toast.error : toast.warning)(data.message, { id: `ext:${data.message}` })
-          }
+          // Extension notices are developer detail; they never reach the chat.
           push({ kind: 'pi', data })
         })
         es.addEventListener('pimu', (m) => {

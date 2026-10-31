@@ -27,7 +27,7 @@ export function BotTasks({ botId }: { botId: string }) {
   }
 
   return (
-    <div className="mx-auto max-w-3xl p-4">
+    <div>
       <div className="mb-3 flex items-center justify-between">
         <p className="text-sm text-muted-foreground">定时或手动让它做事，结果写进对话。</p>
         <Button asChild size="sm" className="min-h-9">
@@ -36,8 +36,7 @@ export function BotTasks({ botId }: { botId: string }) {
           </a>
         </Button>
       </div>
-      {tasks?.length === 0 && <p className="py-10 text-center text-sm text-muted-foreground">还没有任务</p>}
-      <ul className="divide-y rounded-lg border">
+      <ul className="divide-y rounded-lg border empty:hidden">
         {tasks?.map((t) => (
           <li key={t.id} className="flex items-center gap-2 px-3 py-2.5">
             <a href={`#/tasks/${t.id}`} className="min-w-0 flex-1">

@@ -20,7 +20,7 @@ function parse(hash: string): Route {
   if (h === '/inbox') return { name: 'inbox' }
   if (h === '/memory') return { name: 'settings', section: 'memory' }
   const st = h.match(/^\/settings(?:\/(\w+))?$/)
-  if (st) return { name: 'settings', section: st[1] ?? 'appearance' }
+  if (st) return { name: 'settings', section: st[1] ?? 'home' }
   const t = h.match(/^\/tasks\/(new|\d+)(?:\?bot=([\w-]+))?$/)
   if (t) return { name: 'task', id: t[1] === 'new' ? 'new' : Number(t[1]), bot: t[2] }
   return { name: 'list' }

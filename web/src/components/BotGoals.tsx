@@ -15,7 +15,6 @@ import { api, errMsg } from '@/lib/api'
 import { every, fmtDate } from '@/lib/format'
 import type { Beat, Goal, GoalDetail } from '@/lib/types'
 import { useGlobalEvents } from '@/lib/useGlobalEvents'
-import { InboxPage } from './InboxPage'
 
 const BEAT: Record<Beat['status'], string> = { running: '运行中', ok: '完成', budget: '超预算', error: '出错' }
 
@@ -30,8 +29,8 @@ export function BotGoals({ botId }: { botId: string }) {
   useGlobalEvents((e) => (e.type === 'goal_update' || e.type === 'resync') && load())
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <div className="space-y-3 p-4 pb-0">
+    <div>
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">给它目标，它会按心跳自己检查，只在重要时通知你。</p>
           <Button size="sm" className="min-h-9 shrink-0" onClick={() => setEdit('new')}>
@@ -41,8 +40,6 @@ export function BotGoals({ botId }: { botId: string }) {
         {goals?.length === 0 && <p className="py-8 text-center text-sm text-muted-foreground">还没有目标</p>}
         {goals?.map((g) => <GoalCard key={g.id} g={g} onEdit={() => setEdit(g)} reload={load} />)}
       </div>
-      <h3 className="px-4 pt-6 text-sm font-medium">收件箱</h3>
-      <InboxPage bot={botId} />
       {edit && <GoalForm botId={botId} goal={edit === 'new' ? undefined : edit} onClose={() => setEdit(null)} onSaved={load} />}
     </div>
   )

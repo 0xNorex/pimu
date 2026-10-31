@@ -17,14 +17,13 @@ export type Prefs = {
   mono: 'geist' | 'system'
   code: 'soft' | 'ink'
   texture: boolean
-  thinking: boolean // thinking blocks open by default
-  tools: boolean // tool groups open by default
+  work: 'off' | 'summary' | 'full' // how much of the agent's thinking / tool calls the chat shows
   sendKey: 'enter' | 'mod'
   haptics: boolean
 }
 export const DEFAULTS: Prefs = {
   theme: 'system', palette: 'paper', font: 'm', density: 'comfortable', width: 'normal', radius: 'normal', motion: 'system',
-  mono: 'geist', code: 'soft', texture: true, thinking: false, tools: false, sendKey: 'enter', haptics: false,
+  mono: 'geist', code: 'soft', texture: true, work: 'off', sendKey: 'enter', haptics: false,
 }
 const KEY = 'pimu-prefs'
 type Stored = { prefs: Partial<Prefs>; at: number }

@@ -14,6 +14,32 @@ type Dirs = { path?: string; parent?: string; dirs: string[]; roots: string[]; r
 // Anyone can ask for the picker; App mounts the single dialog.
 export const openNewSession = (cwd?: string) => window.dispatchEvent(new CustomEvent('pimu:new-session', { detail: cwd }))
 
+const LAST = 'pimu-last-dir'
+const remember = (cwd: string) => {
+  try {
+    localStorage.setItem(LAST, cwd)
+  } catch {
+    /* private mode */
+  }
+}
+// The everyday path: start right away in the last directory used, no dialog.
+// The directory shows as small text in the chat header; tapping it opens the picker.
+export async function quickNewSession(cwd?: string) {
+  try {
+    let dir = cwd || localStorage.getItem(LAST) || ''
+    if (!dir) {
+      const top = await api<Dirs>('/api/dirs')
+      dir = top.recent[0] || top.roots[0] || ''
+    }
+    if (!dir) return openNewSession()
+    const r = await api<{ id: string }>('/api/sessions', { cwd: dir })
+    remember(dir)
+    go(`#/s/${r.id}`)
+  } catch {
+    openNewSession(cwd)
+  }
+}
+
 export function NewSessionDialog() {
   const [open, setOpen] = useState(false)
   const [d, setD] = useState<Dirs | null>(null)
@@ -65,6 +91,7 @@ export function NewSessionDialog() {
     setBusy(true)
     try {
       const r = await api<{ id: string }>('/api/sessions', { cwd: d.path })
+      remember(d.path)
       setOpen(false)
       go(`#/s/${r.id}`)
     } catch (e) {
@@ -92,8 +119,8 @@ export function NewSessionDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="gap-3 p-0 sm:max-w-lg" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader className="px-5 pt-5">
-          <DialogTitle>新会话</DialogTitle>
-          <DialogDescription>选一个工作目录；pi 会在这里读写文件、跑命令。</DialogDescription>
+          <DialogTitle>在哪个文件夹里开始</DialogTitle>
+          <DialogDescription className="sr-only">它会在这里读写文件。</DialogDescription>
         </DialogHeader>
         <form
           className="flex items-center gap-1.5 px-5"

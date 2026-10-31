@@ -23,7 +23,9 @@ export type ToolResultMessage = {
   isError: boolean
   timestamp: number
 }
-export type Message = UserMessage | AssistantMessage | ToolResultMessage
+// pi inserts one when it compacts the context (manual /compact or automatic).
+export type CompactionMessage = { role: 'compactionSummary'; summary?: string; tokensBefore?: number; timestamp: number }
+export type Message = UserMessage | AssistantMessage | ToolResultMessage | CompactionMessage
 
 export type ToolResult = { content?: (TextBlock | ImageBlock)[]; details?: unknown }
 
@@ -56,6 +58,7 @@ export type PiEvent =
   | { type: 'tool_execution_update'; toolCallId: string; partialResult: ToolResult }
   | { type: 'tool_execution_end'; toolCallId: string; result: ToolResult; isError: boolean; durationMs?: number }
   | { type: 'queue_update'; steering: string[]; followUp: string[] }
+  | { type: 'auto_compaction_end'; aborted?: boolean }
   | UIRequest
 
 export type PimuEvent =
@@ -94,6 +97,7 @@ export type Bot = {
   last?: string
   lastRole?: 'user' | 'assistant'
   jobsRunning?: number
+  paused?: boolean
 }
 
 export type SessionState = {

@@ -53,7 +53,7 @@ export function TasksPage() {
           {tasks?.length === 0 && (
             <div className="px-6 py-12 text-center text-sm text-muted-foreground">
               <p className="font-medium text-foreground">还没有任务</p>
-              <p className="mt-1">任务会按计划在后台启动 pi 执行提示词。点右上角“新建”。</p>
+              <p className="mt-1">任务会按计划在后台自动运行。点右上角“新建”。</p>
             </div>
           )}
           {tasks?.map((t) => (

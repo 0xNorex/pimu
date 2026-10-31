@@ -1,16 +1,16 @@
 import type { MouseEvent, ReactNode } from 'react'
-import { CheckIcon, MonitorIcon, MoonIcon, RotateCcwIcon, SunIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, MonitorIcon, MoonIcon, RotateCcwIcon, SunIcon } from 'lucide-react'
 import { Switch } from '@/components/ui/switch'
 import { DEFAULTS, haptic, reveal, setPrefs, usePrefs, type Prefs } from '@/lib/prefs'
 
 // Linear / Raycast-style: a few curated looks, everything else is a small knob.
 const PALETTES: [Prefs['palette'], string, string][] = [
-  ['paper', '纸张', '暖白 · 靛蓝'],
-  ['neutral', '石墨', '纯中性 · 黑白'],
-  ['ocean', '海洋', '冷蓝 · 青'],
-  ['forest', '森林', '苔绿 · 松'],
-  ['rose', '玫瑰', '暖粉 · 珊瑚'],
-  ['contrast', '高对比', '清晰 · 无障碍'],
+  ['paper', '纸张', '暖白'],
+  ['ocean', '海洋', '冷蓝'],
+  ['rose', '玫瑰', '暖粉'],
+  ['neutral', '石墨', '纯中性'],
+  ['forest', '森林', '苔绿'],
+  ['contrast', '高对比', '无障碍'],
 ]
 
 // A segmented control whose pill springs between options.
@@ -115,10 +115,11 @@ export function AppearanceSection() {
     setPrefs(patch)
   }
   const changed = (Object.keys(DEFAULTS) as (keyof Prefs)[]).some((k) => p[k] !== DEFAULTS[k])
+  const swatch = ([id, name, sub]: (typeof PALETTES)[number]) => <Swatch key={id} id={id} name={name} sub={sub} on={p.palette === id} pick={(e) => p.palette !== id && reveal({ palette: id }, e)} />
   return (
     <>
       <Group title="主题">
-        <Row title="模式" sub="跟随系统会随白天 / 夜间自动切换">
+        <Row title="模式">
           <Seg
             label="模式"
             value={p.theme}
@@ -130,58 +131,66 @@ export function AppearanceSection() {
             ]}
           />
         </Row>
-        <div role="radiogroup" aria-label="配色" className="grid grid-cols-2 gap-x-3 gap-y-4 p-4 sm:grid-cols-3">
-          {PALETTES.map(([id, name, sub]) => (
-            <Swatch key={id} id={id} name={name} sub={sub} on={p.palette === id} pick={(e) => p.palette !== id && reveal({ palette: id }, e)} />
-          ))}
+        <div role="radiogroup" aria-label="配色" className="grid grid-cols-3 gap-x-3 gap-y-4 p-4">
+          {PALETTES.slice(0, 3).map(swatch)}
         </div>
-      </Group>
-
-      <Group title="阅读" hint="预览即实际效果：字号、宽度、间距和圆角都作用于对话页。">
-        <Preview />
         <Row title="字号">
           <Seg label="字号" value={p.font} onChange={(font) => set({ font })} options={[['s', '小'], ['m', '中'], ['l', '大']]} />
         </Row>
-        <Row title="对话宽度" sub="宽屏上消息列的最大宽度">
-          <Seg label="对话宽度" value={p.width} onChange={(width) => set({ width })} options={[['narrow', '窄'], ['normal', '标准'], ['wide', '宽']]} />
-        </Row>
-        <Row title="密度">
-          <Seg label="密度" value={p.density} onChange={(density) => set({ density })} options={[['comfortable', '舒适'], ['compact', '紧凑']]} />
-        </Row>
-        <Row title="圆角">
-          <Seg label="圆角" value={p.radius} onChange={(radius) => set({ radius })} options={[['sharp', '方正'], ['normal', '标准'], ['round', '圆润']]} />
-        </Row>
-        <Row title="代码字体">
-          <Seg label="代码字体" value={p.mono} onChange={(mono) => set({ mono })} options={[['geist', 'Geist Mono'], ['system', '系统']]} />
-        </Row>
-        <Row title="代码块">
-          <Seg label="代码块" value={p.code} onChange={(code) => set({ code })} options={[['soft', '柔和'], ['ink', '墨色']]} />
-        </Row>
       </Group>
 
-      <Group title="动效与质感">
-        <Row title="动效" sub="减弱：循环动画只播一次，不做页面转场">
-          <Seg label="动效" value={p.motion} onChange={(motion) => set({ motion })} options={[['system', '系统'], ['full', '完整'], ['reduced', '减弱'], ['off', '关闭']]} />
-        </Row>
-        <Row title="纸张纹理" sub="极淡的颗粒感，高对比配色下自动关闭">
-          <Switch checked={p.texture} onCheckedChange={(texture) => set({ texture })} aria-label="纸张纹理" />
-        </Row>
-        <Row title="触感反馈" sub="发送时轻震（仅部分 Android 浏览器）">
-          <Switch checked={p.haptics} onCheckedChange={(haptics) => set({ haptics })} aria-label="触感反馈" />
-        </Row>
-      </Group>
+      <details className="group/more space-y-6 [&[open]>summary]:mb-6">
+        <summary className="pressable mx-auto flex h-10 w-fit cursor-pointer list-none items-center gap-1.5 rounded-full px-4 text-sm text-muted-foreground select-none hover:bg-foreground/[0.05] hover:text-foreground [&::-webkit-details-marker]:hidden">
+          更多 <ChevronDownIcon className="size-3.5 transition-transform group-open/more:rotate-180" />
+        </summary>
+        <div className="flex flex-col gap-6">
+          <Group title="其他配色">
+            <div role="radiogroup" aria-label="其他配色" className="grid grid-cols-3 gap-x-3 gap-y-4 p-4">
+              {PALETTES.slice(3).map(swatch)}
+            </div>
+          </Group>
 
-      <Group title="对话" hint="外观与对话偏好保存在本机，并同步到你登录 Pimu 的其他设备。">
-        <Row title="默认展开思考过程">
-          <Switch checked={p.thinking} onCheckedChange={(thinking) => set({ thinking })} aria-label="默认展开思考过程" />
-        </Row>
-        <Row title="默认展开工具调用">
-          <Switch checked={p.tools} onCheckedChange={(tools) => set({ tools })} aria-label="默认展开工具调用" />
-        </Row>
-        <Row title="发送" sub="另一种组合换行；手机上回车总是换行">
-          <Seg label="发送键" value={p.sendKey} onChange={(sendKey) => set({ sendKey })} options={[['enter', 'Enter'], ['mod', '⌘ Enter']]} />
-        </Row>
-      </Group>
+          <Group title="阅读" hint="预览即实际效果。">
+            <Preview />
+            <Row title="对话宽度">
+              <Seg label="对话宽度" value={p.width} onChange={(width) => set({ width })} options={[['narrow', '窄'], ['normal', '标准'], ['wide', '宽']]} />
+            </Row>
+            <Row title="密度">
+              <Seg label="密度" value={p.density} onChange={(density) => set({ density })} options={[['comfortable', '舒适'], ['compact', '紧凑']]} />
+            </Row>
+            <Row title="圆角">
+              <Seg label="圆角" value={p.radius} onChange={(radius) => set({ radius })} options={[['sharp', '方正'], ['normal', '标准'], ['round', '圆润']]} />
+            </Row>
+            <Row title="代码字体">
+              <Seg label="代码字体" value={p.mono} onChange={(mono) => set({ mono })} options={[['geist', 'Geist Mono'], ['system', '系统']]} />
+            </Row>
+            <Row title="代码块">
+              <Seg label="代码块" value={p.code} onChange={(code) => set({ code })} options={[['soft', '柔和'], ['ink', '墨色']]} />
+            </Row>
+          </Group>
+
+          <Group title="对话">
+            <Row title="显示过程" sub="它思考和用工具的过程。不显示时，每条回复的 ⋯ 里仍可「查看过程」">
+              <Seg label="显示过程" value={p.work} onChange={(work) => set({ work })} options={[['off', '不显示'], ['summary', '摘要'], ['full', '全部']]} />
+            </Row>
+            <Row title="发送" sub="另一种组合换行；手机上回车总是换行">
+              <Seg label="发送键" value={p.sendKey} onChange={(sendKey) => set({ sendKey })} options={[['enter', 'Enter'], ['mod', '⌘ Enter']]} />
+            </Row>
+          </Group>
+
+          <Group title="动效与质感" hint="这些偏好保存在本机，并同步到你登录 Pimu 的其他设备。">
+            <Row title="动效">
+              <Seg label="动效" value={p.motion} onChange={(motion) => set({ motion })} options={[['system', '系统'], ['full', '完整'], ['reduced', '减弱'], ['off', '关闭']]} />
+            </Row>
+            <Row title="纸张纹理">
+              <Switch checked={p.texture} onCheckedChange={(texture) => set({ texture })} aria-label="纸张纹理" />
+            </Row>
+            <Row title="触感反馈" sub="仅部分 Android 浏览器">
+              <Switch checked={p.haptics} onCheckedChange={(haptics) => set({ haptics })} aria-label="触感反馈" />
+            </Row>
+          </Group>
+        </div>
+      </details>
 
       {changed && (
         <button type="button" onClick={(e) => reveal({ ...DEFAULTS }, e)} className="pressable mx-auto flex h-10 items-center gap-2 rounded-full px-4 text-sm text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground">

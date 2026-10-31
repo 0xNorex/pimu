@@ -11,6 +11,7 @@ type Image = { type: 'image'; data: string; mimeType: string }
 type Att = { key: string; file: File; url?: string; path?: string; busy?: boolean }
 
 const IMAGE_MAX = 10 << 20
+const FILE_MAX = 25 << 20 // the server's upload limit: refuse before sending 25 MB for nothing
 const isImage = (f: File) => /^image\/(png|jpe?g|gif|webp)$/.test(f.type)
 const fmtSize = (n: number) => (n < 1024 ? `${n} B` : n < 1 << 20 ? `${Math.round(n / 1024)} KB` : `${(n / (1 << 20)).toFixed(1)} MB`)
 
@@ -84,6 +85,10 @@ export function Composer({ sessionId, name, visionOk, streaming, disabled, queue
           continue
         }
         setAtts((a) => [...a, { key, file, url: URL.createObjectURL(file) }])
+        continue
+      }
+      if (file.size > FILE_MAX) {
+        toast.error(`${file.name} 超过 25 MB`)
         continue
       }
       setAtts((a) => [...a, { key, file, busy: true }])

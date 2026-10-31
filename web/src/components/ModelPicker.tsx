@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { cleanModel } from '@/lib/format'
 import { api, errMsg } from '@/lib/api'
 import type { Model, SessionDetail } from '@/lib/types'
 
@@ -64,12 +65,12 @@ export function ModelPicker({ open, onOpenChange, detail, onSaved }: Props) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>会话设置</DialogTitle>
-          <DialogDescription>修改会通过 pi 写入会话。</DialogDescription>
+          <DialogTitle>模型与思考强度</DialogTitle>
+          <DialogDescription className="sr-only">只影响这个对话。</DialogDescription>
         </DialogHeader>
         <div className="grid gap-4">
           <div className="grid gap-2">
-            <Label>model</Label>
+            <Label>模型</Label>
             {models && models.length === 0 ? (
               <p className="text-sm text-muted-foreground">没有可用模型：在终端运行 `pi` 并 `/login`。</p>
             ) : (
@@ -80,7 +81,7 @@ export function ModelPicker({ open, onOpenChange, detail, onSaved }: Props) {
                 <SelectContent>
                   {models?.map((m) => (
                     <SelectItem key={modelKey(m)} value={modelKey(m)}>
-                      {m.name} <span className="text-muted-foreground">· {m.provider}</span>
+                      {cleanModel(m.name) ?? m.id}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -88,7 +89,7 @@ export function ModelPicker({ open, onOpenChange, detail, onSaved }: Props) {
             )}
           </div>
           <div className="grid gap-2">
-            <Label>thinking</Label>
+            <Label>思考强度</Label>
             <Select value={thinking} onValueChange={setThinking}>
               <SelectTrigger className="min-h-11 w-full text-base">
                 <SelectValue placeholder="默认" />
