@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { toast } from 'sonner'
-import { ArrowDownIcon, ChevronLeftIcon, FolderIcon, RotateCcwIcon } from 'lucide-react'
+import { ArrowDownIcon, ChevronLeftIcon, EllipsisIcon, HistoryIcon, InfoIcon, MessageSquarePlusIcon, RotateCcwIcon } from 'lucide-react'
 import { haptic, usePrefs } from '@/lib/prefs'
 import { Button } from '@/components/ui/button'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Skeleton } from '@/components/ui/skeleton'
 import { api, errMsg } from '@/lib/api'
-import { cleanModel, textOf } from '@/lib/format'
+import { cleanModel, fmtDate, textOf } from '@/lib/format'
 import { shape } from '@/lib/work'
 import { go } from '@/lib/route'
 import { initialStore, reducer } from '@/lib/store'
@@ -18,6 +18,7 @@ import { BotAvatar } from './BotAvatar'
 import { BotDialog } from './BotDialog'
 import { botsChanged } from '@/lib/bus'
 import { BotDetails } from './BotDetails'
+import { resumeTopic } from './BotHistory'
 import { LiveJobs, StatusLine, TurnFoot } from './Work'
 import { ChatApprovals } from './ChatApprovals'
 import { Composer } from './Composer'
@@ -28,7 +29,6 @@ import { MessageItem } from './MessageItem'
 // Consecutive thinking / tool rows sit closer together than prose.
 const WORK = new Set(['thinking', 'tool', 'group'])
 const STEP = new Set<string | undefined>(['thinking', 'tool', 'group'])
-import { openNewSession, quickNewSession } from './NewSessionDialog'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { ModelPicker, modelKey } from './ModelPicker'
 
@@ -42,17 +42,34 @@ export function ChatView({ id }: { id: string }) {
   const [jobsLive, setJobsLive] = useState(0)
   const { work } = usePrefs()
   const [editBot, setEditBot] = useState(false)
-  const [unset, setUnset] = useState(false)
   const [bot, setBot] = useState<Bot | null>(null)
   const [visionOk, setVisionOk] = useState(true)
   const [atBottom, setAtBottom] = useState(true)
   const scroller = useRef<HTMLDivElement>(null)
   const connected = useSessionEvents(id, dispatch, setDetail)
 
+  // An earlier topic (详情 → 历史) reads as its bot's, without the composer.
+  const topicOf = detail?.topicOf
+  const [owner, setOwner] = useState<Bot | null>(null)
   const loadBot = useCallback(() => {
     api<{ bot: Bot }>(`/api/bots/${id}`).then((r) => setBot(r.bot)).catch(() => setBot(null))
   }, [id])
   useEffect(loadBot, [loadBot])
+  useEffect(() => {
+    if (topicOf) api<{ bot: Bot }>(`/api/bots/${topicOf}`).then((r) => setOwner(r.bot)).catch(() => {})
+  }, [topicOf])
+  // 新话题: the current conversation goes to 历史; the next message starts with an empty context.
+  const newTopic = async () => {
+    try {
+      await api(`/api/bots/${id}/topics`, {})
+      botsChanged()
+      toast.success('已开始新话题', { description: '之前的对话在「详情 → 历史」里。' })
+      return true
+    } catch (e) {
+      toast.error(errMsg(e))
+      return false
+    }
+  }
   useEffect(() => {
     markSeen(id)
   }, [id, s.messages.length, s.streaming])
@@ -196,8 +213,7 @@ export function ChatView({ id }: { id: string }) {
           return `已命名为「${arg}」`
         })
       case 'new':
-        void quickNewSession(detail?.cwd)
-        return true
+        return bot ? newTopic() : false
       case 'resume':
         go('#/')
         return true
@@ -217,46 +233,48 @@ export function ChatView({ id }: { id: string }) {
     dispatch({ type: 'ui_done', id: reqId })
     await api(`/api/sessions/${id}/ui-response`, { id: reqId, ...r }).catch((e) => toast.error(errMsg(e)))
   }
-  const unsetBot = async () => {
-    try {
-      await api(`/api/bots/${id}`, {}, 'DELETE')
-      setBot(null)
-      botsChanged({ id, bot: false })
-      toast.success('已取消 Bot', { description: '会话和对话都还在，回到按目录分组的会话列表里。' })
-    } catch (e) {
-      toast.error(errMsg(e))
-    }
-  }
   const lastUser = [...s.messages].reverse().find((m) => m.role === 'user')
 
-  const title = bot?.name || detail?.state?.sessionName || detail?.name || '对话'
+  const face = bot ?? owner
+  const title = face?.name || detail?.state?.sessionName || detail?.name || '对话'
   const model = detail?.state?.model?.provider !== 'unknown' ? cleanModel(detail?.state?.model?.name || modelName || detail?.state?.model?.id) : undefined
 
   const retry = lastUser ? () => void send(textOf(lastUser)) : undefined
   const working = s.streaming || jobsLive > 0
-  const dir = detail?.cwd?.split('/').filter(Boolean).pop()
 
   return (
     <main className="page-in flex h-full min-w-0 flex-1 flex-col">
       <header className="z-10 box-content flex h-14 shrink-0 items-center gap-1 border-b border-transparent bg-background/80 px-2 pt-[env(safe-area-inset-top)] backdrop-blur-xl">
-        <Button variant="ghost" size="icon" className="size-11 lg:hidden" aria-label="返回" onClick={() => go('#/')}>
+        <Button variant="ghost" size="icon" className={`size-11 ${topicOf ? '' : 'lg:hidden'}`} aria-label="返回" onClick={() => go(topicOf ? `#/s/${topicOf}` : '#/')}>
           <ChevronLeftIcon />
         </Button>
         <button type="button" className="flex min-w-0 items-center gap-2.5 rounded-md py-1.5 pr-2 pl-1 text-left focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none lg:pl-2" ref={infoBtn} onClick={() => setInfo(true)} aria-label="详情">
-          {bot && (
+          {face && (
             <span className="relative shrink-0">
-              <BotAvatar id={bot.id} className="size-8" />
+              <BotAvatar id={face.id} className="size-8" />
               {working && <span className="absolute -right-0.5 -bottom-0.5 size-2.5 animate-pulse rounded-full border-2 border-background bg-primary" data-working aria-label="正在工作" />}
             </span>
           )}
           <span className="truncate text-[15px] font-medium">{title}</span>
-          {!bot && working && <span className="size-2 shrink-0 animate-pulse rounded-full bg-primary" data-working aria-label="正在工作" />}
+          {topicOf && <span className="shrink-0 text-xs text-muted-foreground">· 以前的话题</span>}
         </button>
-        {!bot && dir && (
-          <button type="button" className="flex min-w-0 shrink items-center gap-1 rounded px-1.5 py-1 text-xs text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground" title="换个文件夹开新对话" onClick={() => openNewSession(detail?.cwd)} data-dir>
-            <FolderIcon className="size-3 shrink-0" />
-            <span className="truncate">{dir}</span>
-          </button>
+        <span className="flex-1" />
+        {bot && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-11 lg:size-9" aria-label="更多">
+                <EllipsisIcon />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="min-w-40">
+              <DropdownMenuItem className="min-h-10" onSelect={() => void newTopic()}>
+                <MessageSquarePlusIcon /> 新话题
+              </DropdownMenuItem>
+              <DropdownMenuItem className="min-h-10" onSelect={() => setInfo(true)}>
+                <HistoryIcon /> 历史与详情
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         )}
       </header>
       <ConnectionBanner connected={connected} lock={s.lock} />
@@ -316,29 +334,25 @@ export function ChatView({ id }: { id: string }) {
       </div>
       {bot && <LiveJobs botId={id} onOpen={() => setInfo(true)} onCount={setJobsLive} />}
       {bot && <ChatApprovals botId={id} />}
+      {topicOf ? (
+        <div className="mx-auto mb-[max(env(safe-area-inset-bottom),12px)] flex w-full max-w-(--chat-w) items-center gap-3 px-4 pt-2" data-topic-bar>
+          <InfoIcon className="size-4 shrink-0 text-muted-foreground" />
+          <span className="min-w-0 flex-1 text-sm text-muted-foreground">以前的话题{detail?.updatedAt ? ` · ${fmtDate(detail.updatedAt)}` : ''}，只读</span>
+          <Button className="min-h-11 shrink-0" onClick={() => void resumeTopic(topicOf, id)}>
+            继续这个话题
+          </Button>
+        </div>
+      ) : (
       <Composer sessionId={id} name={bot?.name} visionOk={visionOk} streaming={s.streaming} disabled={readOnly} queued={s.queue.steering.length + s.queue.followUp.length} onSend={send} onCommand={command} onAbort={abort} />
+      )}
       {s.uiRequests[0] && <ExtensionDialog key={s.uiRequests[0].id} req={s.uiRequests[0]} onReply={reply(s.uiRequests[0].id)} />}
-      <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot ?? undefined} adopt={bot ? undefined : { id, name: detail?.state?.sessionName || detail?.name }} onSaved={setBot} />
-      <AlertDialog open={unset} onOpenChange={setUnset}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>取消「{bot?.name}」的 Bot 身份？</AlertDialogTitle>
-            <AlertDialogDescription>只去掉名字、人设和后台目标；会话、对话和文件都保留，之后随时可以再设为 Bot。</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel className="min-h-11">算了</AlertDialogCancel>
-            <AlertDialogAction className="min-h-11" onClick={() => void unsetBot()}>
-              取消 Bot
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {bot && <BotDialog open={editBot} onOpenChange={setEditBot} bot={bot} onSaved={setBot} />}
       <BotDetails
         onClosed={() => infoBtn.current?.focus()}
         open={info}
         onOpenChange={setInfo}
-        bot={bot}
-        onBot={setBot}
+        bot={bot ?? owner}
+        onBot={bot ? setBot : setOwner}
         onEdit={() => (setInfo(false), setEditBot(true))}
         advanced={
           <div className="space-y-3">
@@ -350,7 +364,7 @@ export function ChatView({ id }: { id: string }) {
                 ['模型', [model, detail?.state?.thinkingLevel].filter(Boolean).join(' · ')],
                 ['工作目录', detail?.cwd],
                 ['会话 ID', id],
-                ['终端打开', `pi --session ${id}`],
+                ['终端打开', detail?.path ? `pi --session ${detail.path}` : '发第一条消息后可用'],
               ].map(([k, v]) => (
                 <div key={k} className="contents">
                   <dt className="text-muted-foreground">{k}</dt>
@@ -363,11 +377,6 @@ export function ChatView({ id }: { id: string }) {
             <Button variant="outline" className="min-h-11 w-full justify-start" disabled={readOnly} onClick={() => void release()}>
               交给终端（释放进程和锁）
             </Button>
-            {bot && (
-              <Button variant="ghost" className="min-h-11 w-full justify-start text-destructive" onClick={() => (setInfo(false), setUnset(true))}>
-                取消 Bot（保留会话）
-              </Button>
-            )}
           </div>
         }
       />

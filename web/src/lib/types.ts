@@ -70,19 +70,15 @@ export type Incoming = { kind: 'pi'; data: PiEvent } | { kind: 'pimu'; data: Pim
 
 export type Model = { id: string; name: string; provider: string; reasoning?: boolean }
 
-export type SessionSummary = {
-  id: string
-  path?: string
-  cwd: string
-  name?: string
-  preview?: string
-  last?: string
-  lastRole?: 'user' | 'assistant'
-  updatedAt: string
-  status: 'idle' | 'running' | 'streaming' | 'external'
-}
+export type SessionStatus = 'idle' | 'running' | 'streaming' | 'external'
 
-// A bot is a pi session plus display metadata (Pimu's bots table).
+// The built-in bot for ad-hoc questions: always there, can be renamed, not archived.
+export const ASSISTANT = 'pm-assistant'
+
+// An earlier conversation of a bot (详情 → 历史); read-only until resumed.
+export type Topic = { id: string; title: string; cwd: string; updatedAt: string }
+
+// A bot: its current pi session (id = bot id) plus display metadata (Pimu's bots table).
 export type Bot = {
   id: string
   name: string
@@ -93,7 +89,7 @@ export type Bot = {
   mode: 'trusted' | 'guarded'
   createdAt: string
   updatedAt: string
-  status: SessionSummary['status']
+  status: SessionStatus
   last?: string
   lastRole?: 'user' | 'assistant'
   jobsRunning?: number
@@ -107,7 +103,7 @@ export type SessionState = {
   sessionName?: string
 }
 
-export type SessionDetail = { id: string; cwd?: string; name?: string; status: SessionSummary['status']; state?: SessionState }
+export type SessionDetail = { id: string; path?: string; cwd?: string; name?: string; updatedAt?: string; topicOf?: string; status: SessionStatus; state?: SessionState }
 
 export type RunStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'aborted'
 export type TaskRun = {

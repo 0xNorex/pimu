@@ -78,7 +78,7 @@ func TestNewTopicAndResume(t *testing.T) {
 		t.Fatal("current conversation still there")
 	}
 	tops := h.Topics("pm-bot")
-	if len(tops) != 1 || tops[0].Preview != "first topic" || tops[0].Cwd != "/work" || !h.IsTopic(tops[0].ID) {
+	if len(tops) != 1 || tops[0].Preview != "first topic" || tops[0].Cwd != "/work" || !isTopic(h, tops[0].ID) {
 		t.Fatalf("topics: %+v", tops)
 	}
 	old := tops[0].ID
@@ -91,7 +91,7 @@ func TestNewTopicAndResume(t *testing.T) {
 	if err := h.ResumeTopic(context.Background(), "pm-bot", old); err != nil {
 		t.Fatal(err)
 	}
-	if s, ok := h.Idx.Find("pm-bot"); !ok || s.Preview != "first topic" || h.IsTopic("pm-bot") {
+	if s, ok := h.Idx.Find("pm-bot"); !ok || s.Preview != "first topic" || isTopic(h, "pm-bot") {
 		t.Fatalf("resumed: %+v %v", s, ok)
 	}
 	if b, _ := os.ReadFile(cur); string(b) != body {
@@ -104,3 +104,5 @@ func TestNewTopicAndResume(t *testing.T) {
 		t.Fatalf("unknown topic: %v", err)
 	}
 }
+
+func isTopic(h *Hub, id string) bool { _, ok := h.TopicOf(id); return ok }

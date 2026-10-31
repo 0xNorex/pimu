@@ -1,53 +1,38 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { ArrowUpIcon, ChevronRightIcon, FolderIcon, FolderPlusIcon, HistoryIcon, Loader2Icon } from 'lucide-react'
-import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { api, errMsg } from '@/lib/api'
 import { shortPath } from '@/lib/format'
-import { go } from '@/lib/route'
 
 type Dirs = { path?: string; parent?: string; dirs: string[]; roots: string[]; recent: string[]; home: string }
 
-// Anyone can ask for the picker; App mounts the single dialog.
-export const openNewSession = (cwd?: string) => window.dispatchEvent(new CustomEvent('pimu:new-session', { detail: cwd }))
-
 const LAST = 'pimu-last-dir'
-const remember = (cwd: string) => {
+// The directory the last bot was created in: the default for the next one.
+export const lastDir = () => {
+  try {
+    return localStorage.getItem(LAST) || ''
+  } catch {
+    return ''
+  }
+}
+export const rememberDir = (cwd: string) => {
   try {
     localStorage.setItem(LAST, cwd)
   } catch {
     /* private mode */
   }
 }
-// The everyday path: start right away in the last directory used, no dialog.
-// The directory shows as small text in the chat header; tapping it opens the picker.
-export async function quickNewSession(cwd?: string) {
-  try {
-    let dir = cwd || localStorage.getItem(LAST) || ''
-    if (!dir) {
-      const top = await api<Dirs>('/api/dirs')
-      dir = top.recent[0] || top.roots[0] || ''
-    }
-    if (!dir) return openNewSession()
-    const r = await api<{ id: string }>('/api/sessions', { cwd: dir })
-    remember(dir)
-    go(`#/s/${r.id}`)
-  } catch {
-    openNewSession(cwd)
-  }
-}
 
-export function NewSessionDialog() {
-  const [open, setOpen] = useState(false)
+// Optional folder browser for a bot's working directory (the field also takes a typed path).
+export function DirPicker({ open, onOpenChange, start: want, onPick }: { open: boolean; onOpenChange: (o: boolean) => void; start?: string; onPick: (path: string) => void }) {
   const [d, setD] = useState<Dirs | null>(null)
   const [typed, setTyped] = useState('')
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [folder, setFolder] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
 
   const browse = async (path: string) => {
     setErr('')
@@ -65,40 +50,27 @@ export function NewSessionDialog() {
   }
 
   useEffect(() => {
-    const on = (e: Event) => {
-      const want = (e as CustomEvent<string | undefined>).detail
-      setOpen(true)
-      setNote('')
-      setFolder(null)
-      void api<Dirs>('/api/dirs').then(async (top) => {
-        const start = want || top.recent[0] || top.roots[0]
-        if (!start) return setErr('没有可用的工作目录，请设置 PIMU_WORKDIRS')
-        if (!(await browse(start)) && want) {
-          setNote(`${shortPath(want, top.home)} 不在允许的目录里，已换到默认目录。`)
-          await browse(top.recent[0] || top.roots[0])
-        }
-      }, (e) => setErr(errMsg(e)))
-    }
-    window.addEventListener('pimu:new-session', on)
-    return () => window.removeEventListener('pimu:new-session', on)
-  }, [])
+    if (!open) return
+    setNote('')
+    setFolder(null)
+    void api<Dirs>('/api/dirs').then(async (top) => {
+      const start = want || top.recent[0] || top.roots[0]
+      if (!start) return setErr('没有可用的工作目录，请设置 PIMU_WORKDIRS')
+      if (!(await browse(start)) && want) {
+        setNote(`${shortPath(want, top.home)} 不在允许的目录里，已换到默认目录。`)
+        await browse(top.recent[0] || top.roots[0])
+      }
+    }, (e) => setErr(errMsg(e)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
 
   const expand = (p: string) => (d?.home && (p === '~' || p.startsWith('~/')) ? d.home + p.slice(1) : p)
   const join = (name: string) => (d?.path === '/' ? '/' : (d?.path ?? '') + '/') + name
 
-  const start = async () => {
+  const start = () => {
     if (!d?.path) return
-    setBusy(true)
-    try {
-      const r = await api<{ id: string }>('/api/sessions', { cwd: d.path })
-      remember(d.path)
-      setOpen(false)
-      go(`#/s/${r.id}`)
-    } catch (e) {
-      toast.error(errMsg(e), { id: 'new-session' })
-    } finally {
-      setBusy(false)
-    }
+    onPick(d.path)
+    onOpenChange(false)
   }
   const mkdir = async (e: FormEvent) => {
     e.preventDefault()
@@ -116,10 +88,10 @@ export function NewSessionDialog() {
   const others = d ? [...new Set([...d.recent, ...d.roots])].filter((p) => p !== d.path).slice(0, 6) : []
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="gap-3 p-0 sm:max-w-lg" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader className="px-5 pt-5">
-          <DialogTitle>在哪个文件夹里开始</DialogTitle>
+          <DialogTitle>选择工作目录</DialogTitle>
           <DialogDescription className="sr-only">它会在这里读写文件。</DialogDescription>
         </DialogHeader>
         <form
@@ -174,11 +146,11 @@ export function NewSessionDialog() {
           </div>
         </ScrollArea>
         <DialogFooter className="m-0 px-5 py-3">
-          <Button variant="ghost" onClick={() => setOpen(false)} className="h-10 sm:h-9">
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="h-10 sm:h-9">
             取消
           </Button>
-          <Button onClick={() => void start()} disabled={!d?.path || busy} className="h-10 sm:h-9">
-            {busy && <Loader2Icon className="animate-spin" />}在此开始
+          <Button onClick={start} disabled={!d?.path} className="h-10 sm:h-9">
+            用这个文件夹
           </Button>
         </DialogFooter>
       </DialogContent>

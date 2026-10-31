@@ -3,8 +3,8 @@ import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react'
 import { LoginPage } from '@/components/LoginPage'
 import { Switcher } from '@/components/Switcher'
 import { BotList } from '@/components/BotList'
-import { NewSessionDialog, quickNewSession } from '@/components/NewSessionDialog'
-import { SquarePenIcon } from 'lucide-react'
+import { NewBot, openNewBot } from '@/components/BotDialog'
+import { PlusIcon } from 'lucide-react'
 import { SECTIONS, type Section } from '@/lib/sections'
 
 // Pages load on demand so the home list (the phone's first screen) stays small.
@@ -68,12 +68,12 @@ export default function App() {
           {page ? <Suspense fallback={<main className="flex-1" />}>{page}</Suspense> : (
             <main className="hidden flex-1 flex-col items-center justify-center text-sm text-muted-foreground lg:flex">
               <span className="brand-mark idle-mark mb-5 size-12! rounded-2xl!" aria-hidden />
-              <p className="font-heading text-base font-semibold text-foreground">没有打开的会话</p>
-              <p className="mt-1">从左边选一个 Bot 或会话</p>
+              <p className="font-heading text-base font-semibold text-foreground">选一个 Bot 开聊</p>
+              <p className="mt-1">随手的问题交给「助手」</p>
               <div className="mt-5 flex items-center gap-4 text-xs">
                 <span className="flex items-center gap-1.5"><kbd className="rounded border bg-card px-1.5 py-0.5 font-mono text-[11px]">⌘K</kbd> 搜索</span>
-                <button type="button" className="pressable flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-foreground/[0.05] hover:text-foreground" onClick={() => void quickNewSession()}>
-                  <SquarePenIcon className="size-3.5" /> 新会话
+                <button type="button" className="pressable flex min-h-9 items-center gap-1.5 rounded-md px-2 hover:bg-foreground/[0.05] hover:text-foreground" onClick={openNewBot}>
+                  <PlusIcon className="size-3.5" /> 新建 Bot
                 </button>
               </div>
             </main>
@@ -81,7 +81,7 @@ export default function App() {
         </>
       )}
       {route.name !== 'login' && <Switcher />}
-      {route.name !== 'login' && <NewSessionDialog />}
+      {route.name !== 'login' && <NewBot />}
       {/* Desktop: out of the way, bottom-right. Phone: top, below the header, clear of the composer. */}
       <Toaster position={wide ? 'bottom-right' : 'top-center'} visibleToasts={3} mobileOffset={{ top: 'calc(env(safe-area-inset-top) + 60px)' }} />
     </div>

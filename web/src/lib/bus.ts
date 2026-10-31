@@ -1,9 +1,7 @@
 import { motionOff as reduced } from './prefs'
-// A session became a bot (bot: true) or stopped being one. The sidebar moves
-// its row to the other tab with a shared-element transition.
-export type BotsChanged = { id: string; bot: boolean }
+// A bot was created or edited: the sidebar reloads now instead of on its next poll.
 export const BOTS_CHANGED = 'pimu:bots-changed'
-export const botsChanged = (d: BotsChanged) => dispatchEvent(new CustomEvent<BotsChanged>(BOTS_CHANGED, { detail: d }))
+export const botsChanged = () => dispatchEvent(new Event(BOTS_CHANGED))
 
 type VTDoc = Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void>; finished: Promise<void> } }
 

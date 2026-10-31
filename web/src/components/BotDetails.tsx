@@ -8,6 +8,7 @@ import { api, errMsg } from '@/lib/api'
 import type { Bot } from '@/lib/types'
 import { BotAvatar } from './BotAvatar'
 import { BotGoals } from './BotGoals'
+import { BotHistory } from './BotHistory'
 import { BotJobs } from './BotJobs'
 import { BotTasks } from './BotTasks'
 
@@ -42,10 +43,12 @@ export function BotDetails({ open, onOpenChange, bot, onBot, onEdit, advanced, o
         <SheetHeader className="items-center pt-8 text-center">
           {bot && <BotAvatar id={bot.id} className="size-16 shadow-soft" />}
           <SheetTitle className="text-lg">{bot?.name ?? '对话'}</SheetTitle>
-          <SheetDescription>{bot?.description || (bot ? '' : '普通对话')}</SheetDescription>
-          <Button variant="outline" size="sm" className="mt-1 min-h-9" onClick={onEdit}>
-            <PencilIcon /> {bot ? '编辑' : '设为 Bot'}
-          </Button>
+          <SheetDescription>{bot?.description}</SheetDescription>
+          {bot && (
+            <Button variant="outline" size="sm" className="mt-1 min-h-9" onClick={onEdit}>
+              <PencilIcon /> 编辑
+            </Button>
+          )}
         </SheetHeader>
         <div className="px-4">
           {bot && (
@@ -59,6 +62,9 @@ export function BotDetails({ open, onOpenChange, bot, onBot, onEdit, advanced, o
               </div>
               <Fold title="后台在做" open>
                 <BotJobs botId={bot.id} />
+              </Fold>
+              <Fold title="历史">
+                <BotHistory botId={bot.id} onOpen={() => onOpenChange(false)} />
               </Fold>
               <Fold title="目标">
                 <BotGoals botId={bot.id} />

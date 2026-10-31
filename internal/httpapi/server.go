@@ -164,6 +164,9 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"id": id, "status": s.hub.Status(id)}
 	if info, ok := s.hub.Idx.Find(id); ok {
 		out["path"], out["cwd"], out["name"], out["updatedAt"] = info.Path, info.Cwd, info.Name, info.UpdatedAt
+		if bot, ok := s.hub.TopicOf(id); ok {
+			out["topicOf"] = bot // an earlier topic: read-only until resumed
+		}
 	} else if cwd, ok := s.known(id); ok {
 		out["cwd"] = cwd
 	} else {
@@ -232,7 +235,7 @@ func (s *Server) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, "empty", "消息为空")
 		return
 	}
-	if s.hub.IsTopic(r.PathValue("id")) {
+	if _, ok := s.hub.TopicOf(r.PathValue("id")); ok {
 		writeErr(w, 409, "topic", "这是以前的话题，先点「继续这个话题」")
 		return
 	}

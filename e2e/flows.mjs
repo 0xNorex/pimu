@@ -63,13 +63,33 @@ const idle = (id, ms) => until(async () => (await api(`/api/sessions/${id}`)).st
 
 const llmLog = () => fetch(E2E_LLM + '/log').then((r) => r.json())
 const sid = (page) => decodeURIComponent(page.url().split('#/s/')[1] || '').split('/')[0]
-const newSession = (cwd = `${T}/work`) => api('/api/sessions', { cwd }).then((r) => r.id)
+// Every conversation is a bot's; a throwaway one is a bot with a numbered name.
+let nBot = 0
+const newSession = (cwd = `${T}/work`) => api('/api/bots', { name: `e2e-${++nBot}`, cwd }).then((r) => r.bot.id)
 async function prompt(id, message, extra = {}) {
   await api(`/api/sessions/${id}/prompt`, { message, ...extra })
   await sleep(300)
   await idle(id, 20000)
 }
-const makeBot = (id, name, extra = {}) => api('/api/bots', { sessionId: id, name, ...extra }).then((r) => r.bot)
+const makeBot = (name, extra = {}) => api('/api/bots', { name, ...extra }).then((r) => r.bot)
+const ASSISTANT = 'pm-assistant'
+const sidebar = () => page.locator('nav[aria-label=Bot]')
+
+// A plain pi session from before V17 (e.g. opened in a terminal): moved into 助手 on first start.
+function seedPlainSession() {
+  const dir = `${T}/agent/sessions/--plain--`
+  fs.mkdirSync(dir, { recursive: true })
+  const ts = '2026-01-01T00:00:00.000Z'
+  const lines = [
+    { type: 'session', version: 3, id: 'pm-plain1', timestamp: ts, cwd: `${T}/work2` },
+    { type: 'message', id: 'u1', parentId: null, timestamp: ts, message: { role: 'user', content: [{ type: 'text', text: '迁移前的问题' }], timestamp: 1767225600000 } },
+    { type: 'message', id: 'a1', parentId: 'u1', timestamp: ts, message: { role: 'assistant', content: [{ type: 'text', text: '迁移前的回答' }], api: 'openai-completions', provider: 'mock', model: 'echo-1', stopReason: 'stop', timestamp: 1767225601000,
+      usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } } } },
+  ]
+  fs.writeFileSync(`${dir}/2026-01-01T00-00-00-000Z_pm-plain1.jsonl`, lines.map((l) => JSON.stringify(l)).join('\n') + '\n', { mode: 0o600 })
+  // a background job's session stays where it is
+  fs.writeFileSync(`${dir}/2026-01-01T00-00-01-000Z_pimu-j99.jsonl`, JSON.stringify({ type: 'session', version: 3, id: 'pimu-j99', timestamp: ts, cwd: `${T}/work` }) + '\n', { mode: 0o600 })
+}
 
 // ---- runner ----
 const results = []
@@ -113,6 +133,7 @@ async function say(text, key = 'Enter') {
 const chat = () => page.locator('main')
 
 async function main() {
+  seedPlainSession()
   await startPimu()
   browser = await chromium.launch({ executablePath: process.env.PW_CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] })
   ctx = await newContext()
@@ -128,7 +149,7 @@ async function main() {
 
   // ---------- auth ----------
   await flow('auth: token login, bad token, bearer, logout', async () => {
-    expect((await fetch(URL + '/api/sessions')).status === 401, 'unauthenticated API must be 401')
+    expect((await fetch(URL + '/api/bots')).status === 401, 'unauthenticated API must be 401')
     await open('#/')
     await page.waitForURL(/#\/login/)
     await page.getByPlaceholder('PIMU_TOKEN').fill('wrong-token-wrong-token-wrong-token')
@@ -137,7 +158,7 @@ async function main() {
     await page.getByPlaceholder('PIMU_TOKEN').fill(TOKEN)
     await page.getByPlaceholder('PIMU_TOKEN').press('Enter')
     await page.waitForURL((u) => !u.hash.includes('login'))
-    await visible(page.getByRole('tab', { name: /Bot/ }))
+    await visible(sidebar().getByText('助手'))
     const st = await page.evaluate(() => fetch('/api/auth/status').then((r) => r.json()))
     expect(st.authed && st.via === 'token', 'auth status via token: ' + JSON.stringify(st))
     expect((await api('/api/bots')).bots, 'bearer token works')
@@ -166,32 +187,44 @@ async function main() {
     await ctx.setOffline(false)
   })
 
-  // ---------- sessions ----------
-  let s1
-  await flow('session: 新会话 starts at once, folder text opens the picker, last dir remembered', async () => {
+  // ---------- bots: create, 助手 ----------
+  let s1, bot
+  await flow('bot: 助手 is built in; + creates a bot (name required, folder picker, last dir remembered); no sessions UI', async () => {
     await open('#/')
-    await page.getByRole('button', { name: '新会话' }).first().click()
-    await page.waitForURL(/#\/s\//)
-    const first = sid(page)
-    expect((await api(`/api/sessions/${first}`)).cwd === `${T}/work`, 'quick session uses the first root')
-    expect(!(await page.getByRole('dialog').count()), 'no dialog on 新会话')
-    await page.locator('[data-dir]').click()
-    const dlg = page.getByRole('dialog')
-    await dlg.getByLabel('目录路径').fill(`${T}/work`)
-    await dlg.getByLabel('目录路径').press('Enter')
-    await dlg.getByRole('button', { name: 'proj' }).click()
-    await visible(dlg.getByText('没有子目录'))
-    await dlg.getByRole('button', { name: '在此开始' }).click()
-    await page.waitForURL((u) => u.hash.startsWith('#/s/') && sid(page) !== first)
+    await visible(sidebar().getByText('助手'))
+    const a = (await api(`/api/bots/${ASSISTANT}`)).bot
+    expect(a.name === '助手' && a.cwd === `${T}/work`, 'assistant in the first workdir: ' + a.cwd)
+    expect((await api(`/api/bots/${ASSISTANT}`, { archived: true }, 'PATCH').then(() => 200, (e) => e.status)) === 400, '助手 cannot be archived')
+    expect((await api(`/api/bots/${ASSISTANT}`, {}, 'DELETE').then(() => 200, (e) => e.status)) >= 404, 'no bot delete / unset API')
+    expect((await api('/api/sessions', { cwd: `${T}/work` }).then(() => 200, (e) => e.status)) >= 404, 'no plain-session create API')
+    expect((await api('/api/bots', { name: '  ' }).then(() => 200, (e) => e.status)) === 400, 'name required')
+    expect(!(await page.getByRole('tab').count()) && !(await page.getByRole('tablist').count()), 'no Bot/会话 tabs')
+    expect(!(await page.getByText(/^会话$|新会话|设为 Bot/).count()), 'no sessions wording')
+    await page.getByRole('button', { name: '新建 Bot' }).first().click()
+    const dlg = page.getByRole('dialog', { name: '新建 Bot' })
+    expect(await dlg.getByRole('button', { name: '创建' }).isDisabled(), 'create disabled without a name')
+    await dlg.getByLabel('名字').fill('E2E 助手')
+    await dlg.getByLabel('一句话简介').fill('端到端测试用')
+    await dlg.getByRole('button', { name: '选择…' }).click()
+    const pick = page.getByRole('dialog', { name: '选择工作目录' })
+    await pick.getByLabel('目录路径').fill(`${T}/work`)
+    await pick.getByLabel('目录路径').press('Enter')
+    await pick.getByRole('button', { name: 'proj' }).click()
+    await visible(pick.getByText('没有子目录'))
+    await pick.getByRole('button', { name: '用这个文件夹' }).click()
+    expect((await dlg.getByLabel('工作目录').inputValue()) === `${T}/work/proj`, 'picked dir in the field')
+    await dlg.getByRole('button', { name: '创建' }).click()
+    await page.waitForURL(/#\/s\/pm-/)
     s1 = sid(page)
-    const st = await api(`/api/sessions/${s1}`)
-    expect(st.cwd === `${T}/work/proj`, 'session cwd ' + st.cwd)
-    expect((await page.locator('[data-dir]').innerText()).trim() === 'proj', 'header shows only the folder name')
-    // the next 新会话 goes straight to the last folder
+    bot = (await api(`/api/bots/${s1}`)).bot
+    expect(bot.name === 'E2E 助手' && bot.cwd === `${T}/work/proj` && bot.description === '端到端测试用', 'bot saved: ' + JSON.stringify(bot))
+    await visible(page.locator('header').getByText('E2E 助手'))
+    await visible(sidebar().getByText('E2E 助手'))
+    // the next bot defaults to the last folder used
     await open('#/')
-    await page.getByRole('button', { name: '新会话' }).first().click()
-    await page.waitForURL((u) => u.hash.startsWith('#/s/') && ![first, s1].includes(sid(page)))
-    expect((await api(`/api/sessions/${sid(page)}`)).cwd === `${T}/work/proj`, 'last dir remembered')
+    await page.getByRole('button', { name: '新建 Bot' }).first().click()
+    expect((await page.getByRole('dialog', { name: '新建 Bot' }).getByLabel('工作目录').inputValue()) === `${T}/work/proj`, 'last dir remembered')
+    await page.keyboard.press('Escape')
     await open(`#/s/${s1}`)
   })
 
@@ -203,7 +236,7 @@ async function main() {
     expect((await code(`${T}/work/..`)) === 400, '.. out of the roots refused')
     expect((await code(`${T}/work/proj/../../..`)) === 400, 'deep .. refused')
     expect((await code(`${T}/work/escape`)) === 400, 'symlink to /etc refused')
-    expect((await api('/api/sessions', { cwd: `${T}/work/escape` }).then(() => 200, (e) => e.status)) === 400, 'session in escaping link refused')
+    expect((await api('/api/bots', { name: 'esc', cwd: `${T}/work/escape` }).then(() => 200, (e) => e.status)) === 400, 'bot in escaping link refused')
     const l = await api('/api/dirs?path=' + encodeURIComponent(`${T}/work`))
     expect(!l.dirs.includes('escape'), 'escaping link not listed: ' + l.dirs)
     expect(l.dirs.includes('inlink'), 'inside link listed: ' + l.dirs)
@@ -350,9 +383,10 @@ async function main() {
     await idle(s1)
   })
 
-  await flow('slash: /name, /session, /compact, /new', async () => {
+  await flow('slash: /name, /session, /compact', async () => {
     await say('/name 改名测试')
-    await until(async () => (await api('/api/sessions')).sessions.find((x) => x.id === s1)?.name === '改名测试', 8000, 'renamed')
+    await until(async () => (await api(`/api/bots/${s1}`)).bot.name === '改名测试', 8000, 'renamed')
+    await api(`/api/bots/${s1}`, { name: 'E2E 助手' }, 'PATCH')
     await say('/session')
     await page.locator('[data-sonner-toast]', { hasText: '会话统计' }).waitFor({ state: 'attached' }).catch(async (e) => {
       throw new Error(`no stats toast; composer=${JSON.stringify(await composer().inputValue())} toasts=${(await page.locator('[data-sonner-toast]').allInnerTexts()).join(' / ')}`)
@@ -367,13 +401,6 @@ async function main() {
     await visible(div)
     // a live, compacted session still returns the full history (file + live context)
     expect((await messages(s1)).filter((m) => m.role === 'user').length >= nBefore, 'history kept after compaction')
-    const before = page.url()
-    await say('/new')
-    expect(!(await page.getByRole('dialog').count()), '/new has no dialog')
-    await page.waitForURL((u) => u.href !== before && u.hash.startsWith('#/s/'), { timeout: 10000 })
-    const s2 = sid(page)
-    expect(s2 && s2 !== s1, 'new session')
-    await page.goto(URL + '/#/s/' + s1)
   })
 
   await flow('chat: model error is shown, session recovers', async () => {
@@ -429,53 +456,78 @@ async function main() {
     await visible(page.getByRole('button', { name: '语音输入' }))
   })
 
-  // ---------- bots ----------
-  let bot
-  await flow('bot: set as bot moves the session file, unset keeps it', async () => {
+  // ---------- topics ----------
+  const topics = (b) => api(`/api/bots/${b}/topics`).then((r) => r.topics)
+  await flow('topic: 新话题 and /new clear the context; 历史 lists them; read-only; 继续这个话题 resumes', async () => {
+    await idle(s1)
     await open(`#/s/${s1}`)
-    await page.getByRole('button', { name: '详情' }).click()
-    await page.getByRole('dialog').getByRole('button', { name: '设为 Bot' }).click()
-    await page.getByLabel('名字').fill('E2E 助手')
-    await page.getByRole('dialog', { name: '设为 Bot' }).getByRole('button', { name: '设为 Bot' }).click()
-    await visible(page.getByRole('tab', { name: /Bot/ }))
-    await until(async () => (await api('/api/bots')).bots.find((b) => b.id === s1), 5000, 'bot listed')
-    await until(() => fs.existsSync(`${T}/data/bots/${s1}/session`) && fs.readdirSync(`${T}/data/bots/${s1}/session`).some((f) => f.endsWith('.jsonl')), 15000, 'session file in bot dir')
     const n = (await messages(s1)).length
-    expect(n >= 4, 'history kept after move: ' + n)
-    await visible(page.locator('#sidebar-panel').getByText('E2E 助手'))
-    expect(!(await page.locator('header [data-dir]').count()), 'bot header: avatar + name only')
-    // unset: 详情 → 高级 → 取消 Bot
+    expect(n >= 4, 'has a conversation: ' + n)
+    await page.getByRole('button', { name: '更多', exact: true }).click()
+    await page.getByRole('menuitem', { name: '新话题' }).click()
+    await until(async () => (await messages(s1)).length === 0, 8000, 'context cleared')
+    await visible(chat().getByText('端到端测试用')) // the empty bot screen
+    const t1 = await topics(s1)
+    expect(t1.length === 1 && t1[0].cwd === `${T}/work/proj`, 'one earlier topic: ' + JSON.stringify(t1))
+    await fetch(E2E_LLM + '/log/reset')
+    await say('新话题第一句')
+    await visible(chat().getByText('echo: 新话题第一句'), 15000)
+    await idle(s1)
+    const log = await llmLog()
+    expect(!JSON.stringify(log).includes('你好 e2e'), 'the model did not see the old conversation')
+    await say('/new')
+    await until(async () => (await topics(s1)).length === 2, 8000, '/new archived it')
+    await until(async () => !(await chat().getByText('echo: 新话题第一句').count()), 8000, 'chat emptied')
     await page.getByRole('button', { name: '详情' }).click()
-    await page.getByRole('dialog').locator('summary', { hasText: '高级' }).click()
-    await page.getByRole('button', { name: '取消 Bot（保留会话）' }).click()
-    await page.getByRole('alertdialog').getByRole('button', { name: /取消 Bot|确定|确认/ }).last().click()
-    await until(async () => !(await api('/api/bots')).bots.find((b) => b.id === s1), 5000, 'bot gone')
-    expect((await messages(s1)).length === n, 'history kept after unset')
-    await prompt(s1, '还在吗')
-    expect((await lastAssistant(s1)).includes('还在吗'), 'session still works after unset')
-    // round trip: set again (API), reset again, set again: history intact each time
-    for (let i = 0; i < 2; i++) {
-      await makeBot(s1, 'E2E 助手')
-      await api(`/api/bots/${s1}`, {}, 'DELETE')
-    }
-    expect((await messages(s1)).length === n + 2, 'history intact after round trips')
-    bot = await makeBot(s1, 'E2E 助手')
+    const d = page.getByRole('dialog')
+    await d.locator('summary', { hasText: '历史' }).click()
+    const items = d.locator('[data-topic]')
+    await until(async () => (await items.count()) === 2, 5000, 'two topics in 历史')
+    expect((await items.first().innerText()).includes('新话题第一句'), 'newest first with its title')
+    expect(/\d/.test(await items.nth(1).innerText()), 'dated')
+    // open the older one: read-only, no composer
+    await items.nth(1).locator('a').click()
+    await page.waitForURL((u) => sid(page) === t1[0].id)
+    await visible(page.locator('[data-topic-bar]'))
+    await visible(chat().getByText('echo: 你好 e2e'))
+    expect(!(await composer().count()), 'read-only: no composer')
+    expect((await api(`/api/sessions/${t1[0].id}/prompt`, { message: 'x' }).then(() => 200, (e) => e.status)) === 409, 'prompt to a topic refused')
+    await page.getByRole('button', { name: '继续这个话题' }).click()
+    await page.waitForURL((u) => sid(page) === s1)
+    await until(async () => (await messages(s1)).length === n, 8000, 'old conversation is current again')
+    expect((await topics(s1)).length === 1, 'the empty current topic was not archived')
+    await prompt(s1, '接着聊')
+    expect((await lastAssistant(s1)).includes('接着聊'), 'resumed topic works')
+    await visible(composer())
   })
 
-  await flow('bot: tabs and search', async () => {
-    const s3 = await newSession(`${T}/work2`)
-    await prompt(s3, '普通会话')
-    await makeBot(await newSession(`${T}/work2`), '另一个机器人')
+  await flow('sidebar: only bots, search; plain sessions migrated into 助手 历史 and resumable', async () => {
+    await makeBot('另一个机器人', { cwd: `${T}/work2` })
     await open('#/')
-    await page.getByRole('tab', { name: /Bot/ }).click()
-    await visible(page.locator('#sidebar-panel').getByText('另一个机器人'))
+    await visible(sidebar().getByText('另一个机器人'))
     await page.getByLabel('搜索 Bot').fill('E2E')
-    await visible(page.locator('#sidebar-panel').getByText('E2E 助手'))
-    expect(!(await page.locator('#sidebar-panel').getByText('另一个机器人').count()), 'search filters bots')
+    await visible(sidebar().getByText('E2E 助手'))
+    expect(!(await sidebar().getByText('另一个机器人').count()), 'search filters bots')
     await page.getByLabel('清除搜索').click()
-    await page.getByRole('tab', { name: /会话/ }).click()
-    await visible(page.locator('#sidebar-panel').getByText('普通会话'))
-    expect(!(await page.locator('#sidebar-panel').getByText('E2E 助手').count()), 'bots not in 会话 tab')
+    expect(!(await page.getByRole('tab').count()), 'no tabs')
+    // migration on first start: file moved into 助手, backup kept, background session untouched
+    const a = await topics(ASSISTANT)
+    const t = a.find((x) => x.id === 'pm-plain1')
+    expect(t && t.cwd === `${T}/work2` && t.title.includes('迁移前的问题'), 'migrated topic: ' + JSON.stringify(a))
+    const old = `${T}/agent/sessions/--plain--/2026-01-01T00-00-00-000Z_pm-plain1.jsonl`
+    expect(fs.existsSync(old + '.pimu-moved') && !fs.existsSync(old), 'original kept as .pimu-moved')
+    expect(fs.existsSync(`${T}/agent/sessions/--plain--/2026-01-01T00-00-01-000Z_pimu-j99.jsonl`), 'background session left alone')
+    expect(JSON.parse(fs.readFileSync(`${T}/data/migrate-plain.json`, 'utf8')).length === 0, 'nothing left to migrate')
+    expect(!fs.readdirSync(`${T}/data/bots/${ASSISTANT}/session`).some((f) => f.includes('pimu-j')), 'job not moved')
+    // resume it in 助手: runs in its original folder
+    await open('#/s/pm-plain1')
+    await visible(chat().getByText('迁移前的回答'))
+    await page.getByRole('button', { name: '继续这个话题' }).click()
+    await page.waitForURL((u) => sid(page) === ASSISTANT)
+    await prompt(ASSISTANT, '迁移后继续')
+    expect((await lastAssistant(ASSISTANT)).includes('迁移后继续'), 'resumed in 助手')
+    expect((await api(`/api/sessions/${ASSISTANT}`)).cwd === `${T}/work2`, 'kept its own cwd')
+    expect((await messages(ASSISTANT)).length >= 4, 'old history + new turn')
   })
 
   await flow('bot: persona + guarded mode via dialog', async () => {
@@ -517,7 +569,7 @@ async function main() {
     await say('DELEGATE: JOBSLOW 整理资料')
     const j = await until(async () => (await jobs()).find((x) => x.status === 'running'), 15000, 'job running')
     await until(async () => (await api('/api/bots')).bots.find((b) => b.id === s1)?.jobsRunning === 1, 5000, 'jobsRunning=1')
-    await visible(page.locator('#sidebar-panel .avatar-working'), 8000)
+    await visible(sidebar().locator('.avatar-working'), 8000)
     await visible(page.locator('[data-live-job]', { hasText: '正在做「e2e 后台任务」' }))
     await visible(page.locator('header [data-working]'))
     await until(async () => (await jobs()).find((x) => x.id === j.id)?.status === 'completed', 30000, 'job completed')
@@ -902,8 +954,7 @@ async function main() {
     await login(m)
     const p = await m.newPage()
     await p.goto(URL + '/#/')
-    await p.getByRole('tab', { name: /Bot/ }).click()
-    await p.locator('#sidebar-panel').getByText('E2E 助手').click()
+    await p.locator('nav[aria-label=Bot]').getByText('E2E 助手').click()
     await p.waitForURL(/#\/s\//)
     await p.getByRole('textbox', { name: '消息' }).waitFor()
     const small = await p.evaluate(() =>

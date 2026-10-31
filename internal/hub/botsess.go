@@ -117,11 +117,15 @@ func (h *Hub) Topics(bot string) []sessions.Info {
 	return out
 }
 
-// IsTopic reports whether id is an earlier topic of some bot (read-only
-// until resumed).
-func (h *Hub) IsTopic(id string) bool {
+// TopicOf reports the bot whose earlier topic id is (read-only until
+// resumed).
+func (h *Hub) TopicOf(id string) (string, bool) {
 	info, ok := h.Idx.Find(id)
-	return ok && h.InBotDir(info.Path) && filepath.Base(filepath.Dir(filepath.Dir(info.Path))) != id
+	if !ok || !h.InBotDir(info.Path) {
+		return "", false
+	}
+	bot := filepath.Base(filepath.Dir(filepath.Dir(info.Path)))
+	return bot, bot != id
 }
 
 // NewTopic archives bot's current conversation under a fresh session id; the
@@ -153,7 +157,7 @@ func (h *Hub) ResumeTopic(ctx context.Context, bot, topic string) error {
 	if _, err := reID(info.Path, topic, bot); err != nil {
 		return err
 	}
-	pimuEvent(h.Stream(bot), map[string]any{"type": "topic"})
+	pimuEvent(h.Stream(bot), map[string]any{"type": "resync"}) // open chats reload
 	return nil
 }
 
@@ -174,7 +178,7 @@ func (h *Hub) archive(bot string) error {
 	if _, err := reID(info.Path, bot, NewID()); err != nil {
 		return err
 	}
-	pimuEvent(h.Stream(bot), map[string]any{"type": "topic"})
+	pimuEvent(h.Stream(bot), map[string]any{"type": "resync"}) // open chats reload
 	return nil
 }
 
