@@ -184,6 +184,10 @@ The backend can be complex; the screen should not be. Everything advanced is opt
   - A slash command's result cleared the composer even if you had typed on meanwhile.
   - Long unbroken words pushed the user bubble past the left edge.
   - Focus did not return to 详情 after closing the drawer with Escape.
+  - While pi auto-retried a failed model call, the turn showed 连不上模型服务 and then
+    kept working underneath it. An error inside a still-running turn is hidden now.
+- Bundle: main JS 284.96 → 284.73 kB (gzip 90.65 → 90.60), CSS 107.41 → 106.99 kB
+  (gzip 18.92 → 18.88).
 
 ## Open risks and not verified
 
