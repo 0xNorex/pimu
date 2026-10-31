@@ -10,7 +10,7 @@ a chat UI, long-lived bots, schedules, background jobs and approvals.
 Everything is a bot: a built-in **助手** takes ad-hoc questions.
 
 <p>
-  <img src="docs/screenshots/home-iphone-dark.webp" width="200" alt="Home on iPhone, dark">
+  <img src="docs/screenshots/home-iphone-dark.webp" width="200" alt="Bot list on iPhone, dark">
   <img src="docs/screenshots/chat-iphone-dark.webp" width="200" alt="Chat on iPhone with a job result">
   <img src="docs/screenshots/safety-mode-iphone-dark.webp" width="200" alt="Bot safety mode setting">
 </p>
@@ -42,9 +42,9 @@ Everything is a bot: a built-in **助手** takes ad-hoc questions.
 - **Settings over pi's files**: models, extensions, skills, MCP, `AGENTS.md`.
 - **Browser**: Playwright MCP steps and screenshots in the Activity tab.
 
-| Chat with tool steps | Inline approval (guarded) | Job card with approval counts |
+| Bot list, ⋯ → 新话题 | 详情 → 历史 | An earlier topic, read-only → 继续这个话题 |
 |---|---|---|
-| ![chat](docs/screenshots/chat-tools-desktop.webp) | ![approval](docs/screenshots/inline-approval-desktop.webp) | ![jobs](docs/screenshots/job-approval-counts-desktop.webp) |
+| ![topic menu](docs/screenshots/topic-menu-desktop.webp) | ![history](docs/screenshots/bot-history-desktop.webp) | ![topic](docs/screenshots/topic-readonly-desktop.webp) |
 
 ## Quick start
 

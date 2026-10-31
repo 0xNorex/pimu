@@ -189,6 +189,40 @@ The backend can be complex; the screen should not be. Everything advanced is opt
 - Bundle: main JS 284.96 → 284.73 kB (gzip 90.65 → 90.60), CSS 107.41 → 106.99 kB
   (gzip 18.92 → 18.88).
 
+## V17 Bots only
+
+- **Removed**: the Bot/会话 tabs and the sessions tab, directory grouping, the
+  新会话 quick-start, 设为 Bot / 取消 Bot (UI, `POST /api/bots {sessionId}` adopt,
+  `DELETE /api/bots/{id}`), `GET/POST /api/sessions`, `hub.Create`, the folder
+  button in the chat header and its CSS. `NewSessionDialog` became a plain
+  `DirPicker` used by the bot form.
+- **助手**: built-in bot `pm-assistant`, created on first start, cwd = first
+  `PIMU_WORKDIRS` entry; renamable, not archivable or deletable.
+- **新建 Bot** (`+`): name required, description, persona, working directory
+  (defaults to the last one used, 选择… opens the picker), identicon.
+- **Topics**: ⋯ → 新话题 or `/new` archives the current conversation and starts a
+  fresh pi session; 详情 → 历史 lists earlier topics (title + date), opens them
+  read-only, 继续这个话题 makes one current. The bot id stays the pi session id of
+  the current conversation (the header id is rewritten on switch), so tasks,
+  goals, jobs and approvals needed no change. `pi --session <path>` in 详情 → 高级.
+- **Migration**: one-time list `<data>/migrate-plain.json`; plain sessions are
+  copied into 助手's dir as history topics (ids and header cwd kept, so resuming
+  runs in the original folder), originals renamed `*.pimu-moved`; sessions held
+  by a terminal pi are retried every minute; job/task/heartbeat sessions and
+  later terminal sessions are left alone. Demo data: 4 plain sessions → 助手 历史,
+  2 old bot files moved into their bot dirs, 1 job session untouched, 0 pending.
+- **e2e**: 45 flows; new: 助手 + create bot + no sessions UI, 新话题 / `/new` /
+  历史 / read-only / resume, plain-session migration and resume in 助手. Old
+  session, set-as-bot and tabs flows removed.
+- **Bugs found**: a bot with no conversation file yet (right after 新话题)
+  returned 404 for its messages; the folder picker's first load could overwrite
+  a path typed quickly. (the e2e waits for it; the component is unchanged)
+- Code: frontend −176 lines net, Go +234 (topics, migration) + 122 test lines.
+  Bundle: JS 284.73 → 281.32 kB (gzip 90.60 → 89.67), CSS 106.99 → 105.24 kB
+  (gzip 18.88 → 18.59).
+- Trade-off: changing a bot's working directory applies from its next topic; an
+  existing conversation keeps the cwd recorded in its file.
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's
