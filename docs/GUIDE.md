@@ -11,10 +11,24 @@ and a **+** (新建 Bot). There are no plain sessions, tabs or directory groups.
 - **助手** is built in: created on first start (id `pm-assistant`), working
   directory = the first `PIMU_WORKDIRS` entry, for ad-hoc questions. It can be
   renamed and edited but not archived or deleted.
-- **新建 Bot**: name (required), optional one-line description and persona,
-  working directory (defaults to the last one you used; 选择… opens the folder
-  picker: the `PIMU_WORKDIRS` roots, subfolders, a path field with `~`, 新建文件夹;
-  everything stays inside the roots). The avatar is an identicon of the bot id.
+- **新建 Bot** (**+**, ⌘N / Ctrl+N, or 新建 Bot in ⌘K): opens an empty chat at
+  once with the composer focused; nothing to fill in. Until its first message
+  it is a draft: not in the list, no name. The first message names it (a short
+  title cut from that message, e.g. 「帮我整理一下本周的读书笔记，按主题分类」→
+  「整理一下本周的读书笔记」, no model call) and it joins the list. A draft you
+  leave without writing is deleted after an hour. It starts in the last folder
+  you gave a bot (else the first `PIMU_WORKDIRS` entry). The avatar is an
+  identicon of the bot id.
+- **Rename**: tap the name in the header (Enter or leaving the field saves, Esc
+  cancels), or `/name 新名字`.
+- **详情 → 设定**: one-line description, persona, and 做事方式 (直接做 / 先问我);
+  saved as you leave a field, no save button. **详情 → 高级 → 更改** (or
+  `/cd 路径`, `/cd` alone opens the picker) changes the working directory: the
+  `PIMU_WORKDIRS` roots, subfolders, a path field with `~`, 新建文件夹; everything
+  stays inside the roots.
+- **归档** (bottom of 详情): one tap, with 撤销 in the toast; an archived bot's
+  详情 has 恢复. 新话题 also has 撤销 (it resumes the topic just archived).
+- **⌘K / Ctrl+K**: jump to a bot, 任务, a settings section, or 新建 Bot.
 - **新话题** (header ⋯, or `/new`) starts a fresh pi session for the bot: the
   context is cleared, the previous conversation is archived. The chat always
   shows the bot's current conversation.
@@ -101,7 +115,7 @@ Design and limits: docs/AUTONOMY.md. Needs the agent extension once:
   directory; L2 = anything else needs approval in the inbox. Approval is for
   one exact call (hash of tool + args), used once. Secret paths are always
   blocked.
-- **Safety mode** (编辑 Bot → 安全模式): `trusted` (default) leaves the bot's main
+- **Safety mode** (详情 → 设定 → 做事方式): `trusted` (default) leaves the bot's main
   chat as native pi; `guarded` puts the L2 gate on it too, with approvals shown
   inline above the composer. `pimu_task` keeps working in both.
 - **Hard limits**: at most 6 beats/hour, a token budget per goal per day, wall

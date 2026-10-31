@@ -142,8 +142,8 @@ export function ChatView({ id }: { id: string }) {
     }
   }
   const setCwd = async (cwd: string) => {
+    rememberDir(cwd) // before the request: leaving the page right away must not lose it (a bad dir falls back on create)
     if (await patchBot({ cwd })) {
-      rememberDir(cwd)
       refreshDetail()
       toast.success('工作目录已改', draft ? undefined : { description: '从下一个新话题起生效' })
       return true

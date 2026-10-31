@@ -223,6 +223,46 @@ The backend can be complex; the screen should not be. Everything advanced is opt
 - Trade-off: changing a bot's working directory applies from its next topic; an
   existing conversation keeps the cwd recorded in its file.
 
+## V18 Zero-friction bots
+
+- **Removed interactions**: the 新建 Bot dialog (name, description, persona,
+  folder, 创建 button) and `BotDialog` itself; the 编辑 button and the edit
+  dialog with its 保存; the required name; the empty-chat instructions
+  (「发条消息开始。」) and the desktop empty-page text (「选一个 Bot 开聊 / 随手的问题交给「助手」」);
+  the 新话题 explanation toast. Archive was a button in the edit dialog; it is
+  now one tap with 撤销. Kept on purpose: the confirm before deleting a goal or a
+  task (destructive, no undo).
+- **Instant bot**: `+` / ⌘N / ⌘K 新建 Bot → `POST /api/bots {cwd: last}` with no
+  name → `#/s/<id>`, composer focused. `GET /api/bots` hides bots with no name,
+  so a draft is never in the list or ⌘K. The first prompt names it
+  (`nameDraft` before pi starts, so pi gets `--name`); the row appears with the
+  existing row/view-transition animation and the header title fades in
+  (`.title-in`). The sweep deletes a draft older than 1 h with no session file
+  that is not running (`dropDraft`, also removes its dir).
+- **Auto-title**: a heuristic in Go (`autoTitle`), zero cost: first line, URLs
+  dropped, cut at the first sentence end, polite openers stripped (请/帮我/你好/
+  can you…), cut at the first comma if the rest is long enough, ≤14 chars CJK /
+  5 words otherwise; nothing usable → 「新 Bot」. A model call was not used: it
+  would cost a model request (and a second pi process) per new bot for a title
+  you can change with one tap.
+- **Where things went**: rename = tap the header name or `/name`; description,
+  persona and mode = 详情 → 设定 (saved on blur / tap); working directory =
+  详情 → 高级 → 更改 or `/cd`; archive/restore = bottom of 详情.
+- **Shortcuts**: ⌘N / Ctrl+N new bot; ⌘K also lists 新建 Bot. Browsers keep
+  ⌘N/Ctrl+N for a new window in a normal tab, so there it only works in the
+  installed PWA or where the browser passes it through (not verified by hand).
+- **e2e**: 47 flows. New/rewritten: + → draft chat without a dialog, focused
+  composer, abandoned draft not listed, last folder reused, auto-title in header
+  and list, inline rename (Enter saves, Esc cancels), 设定 description; Ctrl+N /
+  ⌘K / ⌘K 新建; archive + 撤销 + 恢复, 新话题 + 撤销; persona and mode in 设定;
+  `/cd`. Go: `TestAutoTitle`, `TestDropDraft`.
+- **Bugs found**: the title's first-letter capitalisation split a multibyte
+  rune; a removed URL left a double space; leaving the page right after picking
+  a folder could drop the remembered folder (now stored before the request);
+  the e2e chat flows relied on the page the previous flow left open.
+- Bundle: JS 281.32 → 271.53 kB (gzip 89.67 → 86.85), CSS 105.24 → 105.58 kB
+  (gzip 18.59 → 18.69).
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's

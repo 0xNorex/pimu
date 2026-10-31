@@ -13,7 +13,8 @@
 | `/thinking [lvl]` | ✓ | `set_thinking_level` | 选择器 ✓ | 拦截 → RPC |
 | `/compact [指令]` | ✓ | `compact` | ✗ | **拦截 → RPC（P1）** |
 | `/session` | ✓ | `get_session_stats` | ✗ | 拦截 → RPC，显示统计卡片（顺带做每个 bot 的用量） |
-| `/name [名]` | ✓ | `set_session_name` | 重命名 ✓ | 拦截 → RPC |
+| `/name [名]` | ✓ | `set_session_name` | 改名 ✓（无参数 = 顶栏内联改名） | 拦截 → PATCH bot |
+| `/cd [路径]` | — | — | ✓（无参数 = 文件夹选择器） | Pimu：改 Bot 工作目录 |
 | `/fork` | ✓ | `fork` + `get_fork_messages` | ✗ | RPC：消息菜单“从这里分叉”→ 新 bot |
 | `/clone` | ✓ | `clone` | ✗ | RPC：“复制 bot” |
 | `/export [path]` | ✓ | `export_html` | ✗ | RPC：生成后下载 |

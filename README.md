@@ -26,7 +26,9 @@ Everything is a bot: a built-in **助手** takes ad-hoc questions.
 
 - **Bots only**: the sidebar is a list of bots, each with a name, persona,
   working directory and identicon. The built-in 助手 (cannot be deleted) is for
-  ad-hoc questions. `+` creates a bot.
+  ad-hoc questions. `+` (⌘N) opens a new bot's empty chat at once, no form;
+  the first message names it. Rename by tapping the name; persona, mode and
+  folder live in 详情.
 - **Topics**: 新话题 or `/new` starts a fresh pi session for the bot; earlier
   conversations are in 详情 → 历史, readable and resumable (继续这个话题).
 - **Chat**: streaming, thinking, tool steps, steer/follow-up while it works,
