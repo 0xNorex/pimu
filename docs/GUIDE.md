@@ -106,21 +106,20 @@ Design and limits: docs/AUTONOMY.md. Needs the agent extension once:
 
 ## Settings
 
-The settings page (`#/settings`, ⌘K jumps there too) is a view onto pi's own files. Pimu does not keep a copy of any of them.
+The main UI answers two questions only: what the bot said, and what it needs from you. Everything else is opt-in.
 
-- **外观** (the default section): theme light/dark/system (a circular reveal from the control), six palettes (纸张, 石墨, 海洋, 森林, 玫瑰, 高对比) shown as live mini previews, font size, chat width, density, corner radius, code font and code block style, motion (系统/完整/减弱/关闭), paper texture, haptics, thinking/tool details expanded by default, and the send key (Enter or ⌘/Ctrl Enter). Saved per device in `localStorage` and synced through `GET/PUT /api/prefs` (`<data-dir>/prefs.json`, newest wins). A boot script in `index.html` applies them before first paint, including the PWA `theme-color`.
-- **模型**: picks the default model and thinking level (`settings.json`: `defaultProvider`, `defaultModel`, `modelThinkingLevels`). Providers from `models.json` are read-only, and API keys and `!command` keys are masked.
-- **扩展**: toggles the built-in extensions (`-builtin:<name>` in `settings.extensions`). Lists the files in `~/.pi/agent/extensions/`, packages, and the commands extensions register.
-- **Skills**: shows skills and prompt templates as pi discovers them (`get_commands`). You can read each one's file.
-- **MCP**: lists the servers in `~/.pi/agent/mcp.json` with an `enabled` switch. 检测连接 runs `pi mcp list --json`. Env and header values are never sent to the browser.
-- **记忆**: edits the global `~/.pi/agent/AGENTS.md`. `#/memory` redirects here.
-- **Pimu**: Telegram status, versions, logout.
+- **Chat**: thinking and tool rows are hidden by default. While the bot works there is one quiet status line (正在运行命令… / 正在读文件…) that goes away when the answer lands. Each finished reply has a ⋯ menu (复制, 查看过程). Errors are one sentence with 重试; the raw text sits behind 详情. Compaction is a faint 已整理上下文 divider, never a toast. The header is the bot's avatar and name, plus a dot while it works; 详情 opens the bot drawer.
+- **Bot drawer (详情)**: 暂停所有后台活动 (stops heartbeats, scheduled tasks and goal actions), what it is doing in the background as plain cards (正在做…, 完成了，点击查看, 停下了 + 重试), goals, schedules, and under 高级 the folder, mode, usage and the developer links.
+- **Settings top level**: 外观, Bot 模式 (先问我 / 直接做 per bot), 通知 (Telegram status), 退出登录, and a collapsed 高级 (models, extensions, skills, MCP, memory, schedules).
+- **外观**: mode, palette and font size up front; **显示过程** 关闭 (default) / 摘要 (a small “用了 N 个工具” line) / 全部 (every row). The rest (width, density, radius, code font and style, motion, texture, haptics, send key) is under 更多. Saved per device in `localStorage` and synced through `GET/PUT /api/prefs` (`<data-dir>/prefs.json`, newest wins). A boot script applies them before first paint, including the PWA `theme-color`.
+- **高级**: 模型 (default model and thinking level; providers from `models.json` are read-only, keys masked), 扩展, Skills, MCP (`enabled` switch, 检测连接 runs `pi mcp list --json`, env and header values never sent to the browser), 记忆 (`~/.pi/agent/AGENTS.md`, `#/memory` redirects here), versions.
+- Slash commands still work; they are discoverable by typing `/`.
 
 Writes are small read-modify-write edits through temp file + rename. They carry the file's mtime, so an edit made elsewhere gives a 409 instead of being overwritten. Changes apply to new sessions.
 
 ## End-to-end tests
 
-`make e2e` (or `e2e/run.sh`) builds Pimu, starts it on a temp agent dir and data dir with the real `pi` and a scripted mock model (`e2e/mockllm.mjs`), and drives Chrome with playwright-core through every flow: login, PWA, directory picker, streaming, abort, steer/follow-up, slash commands, uploads, bots and tabs, guarded approvals, background jobs (completed, approval, failed, queued, cancelled, interrupted), heartbeats, inbox, webhooks, settings, appearance, restart and the phone layout. `ONLY=<regex>` runs a subset, `KEEP=1` keeps the temp dir (failure screenshots, logs), `e2e/run.sh serve` just starts everything. Your `~/.pi/agent` is never touched. Needs Chrome (`PW_CHROME`, default `/usr/bin/google-chrome`) and `npm i` in `e2e/` (run.sh does it).
+`make e2e` (or `e2e/run.sh`) builds Pimu, starts it on a temp agent dir and data dir with the real `pi` and a scripted mock model (`e2e/mockllm.mjs`), and drives Chrome with playwright-core through every flow: login, PWA, directory picker, streaming, abort, steer/follow-up, slash commands, uploads, bots and tabs, guarded approvals, background jobs (completed, approval, failed, queued, cancelled, interrupted), heartbeats, inbox, webhooks, settings, appearance, restart, reconnect after a server drop, the job idle watchdog, approval expiry, show-work modes, long streams, two tabs, concurrent bots, pause, budget caps, palette contrast, keyboard-only use and the phone layout. `PIMU_JOB_IDLE_SEC` and `PIMU_APPROVAL_TTL_SEC` shorten the watchdog and approval limits for tests. `ONLY=<regex>` runs a subset, `KEEP=1` keeps the temp dir (failure screenshots, logs), `e2e/run.sh serve` just starts everything. Your `~/.pi/agent` is never touched. Needs Chrome (`PW_CHROME`, default `/usr/bin/google-chrome`) and `npm i` in `e2e/` (run.sh does it).
 
 ## Browser (optional)
 

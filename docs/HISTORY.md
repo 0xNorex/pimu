@@ -153,6 +153,38 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
 - Bundle: main JS 281.13 → 284.96 kB (gzip 89.25 → 90.65), CSS 99.81 → 107.41 kB
   (gzip 17.34 → 18.92); the appearance page is in the lazy Settings chunk.
 
+## V16 Minimal by default
+
+The backend can be complex; the screen should not be. Everything advanced is opt-in.
+
+- Chat hides thinking and tool rows; one shimmer status line while working; ⋯ → 查看过程
+  per reply; 外观 → 显示过程 关闭/摘要/全部 replaces the two “expand by default” toggles.
+  Errors are one sentence + 重试, details collapsed. Compaction is a faint divider.
+- Approval cards: one sentence of what and why, 允许 / 拒绝, details collapsed; on a phone
+  the card fits the width with 44px buttons.
+- Bot drawer (详情) holds pause, background work as plain cards, goals, schedules, usage;
+  token counts, ids, paths, model names and job states moved out of the main views.
+  Settings top level is 外观 / Bot 模式 / 通知 / 退出登录 + collapsed 高级. 新会话 starts at once in
+  the last folder (small clickable folder text opens the picker). Short model names.
+- Backend: per-bot pause, idle watchdog for background jobs (interrupted with a plain
+  reason and 重试), daily budget reminder at 80%, heartbeat noop leaves no trace.
+- E2E: 45 flows. Bugs found, root causes fixed:
+  - Each panel opened its own `/api/events` stream; with the bot drawer open a tab held
+    6+ HTTP/1.1 connections and ordinary requests (the pause switch) hung forever. One
+    shared stream per tab now.
+  - `PIMU_JOB_IDLE_SEC` was read after `serve` scrubs every `PIMU_*` variable, so the
+    watchdog always used 10 minutes. Read in config now. The watchdog also no longer
+    counts replies to Pimu's own RPC polls as progress.
+  - A live session that had been compacted returned only pi's context (summary + kept
+    messages): history vanished after `/compact` until pi exited. The file history is
+    merged in front, and an idle session shows the compaction divider in the same spot.
+  - The directory picker listed symlinks pointing outside the allowed roots.
+  - An expired approval's card stayed on screen (no broadcast on expiry).
+  - Files over 25 MB were uploaded in full before the server refused; checked on the client.
+  - A slash command's result cleared the composer even if you had typed on meanwhile.
+  - Long unbroken words pushed the user bubble past the left edge.
+  - Focus did not return to 详情 after closing the drawer with Escape.
+
 ## Open risks and not verified
 
 - Neither mode is an OS sandbox; pi runs as the local user. Same uid can read pi's
@@ -161,6 +193,7 @@ duplicate model fetch); V9/V10/NOW notes and the stale competitor matrix merged 
 - In guarded mode, MCP tools without `readOnlyHint` (e.g. `browser_navigate`) ask.
 - Cloudflare Access login is covered by Go unit tests only (cfaccess requires https
   issuer and certs URLs, so the e2e suite cannot fake it).
-- Not verified: iPhone Safari by hand, Telegram delivery, very long gate waits, the
-  daily token cap, switching mode while a reply is streaming, the systemd sandbox at runtime and
+- Not verified: iPhone Safari by hand, Telegram delivery, very long gate waits, switching mode while a reply is streaming, the systemd sandbox at runtime and
   SSE through a real tunnel (unit syntax checked with `systemd-analyze verify`).
+- Switching a bot's mode while it is replying applies from the next turn (pi restarts
+  only when idle).
