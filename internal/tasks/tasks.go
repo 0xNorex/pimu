@@ -133,6 +133,12 @@ func (s *Service) fire(taskID int64) {
 		slog.Info("cron skipped: previous run still active", "task", taskID)
 		return
 	}
+	if t, err := s.st.Task(taskID); err == nil && t.SessionMode == "reuse" && t.SessionID != nil {
+		if b, err := s.st.Bot(*t.SessionID); err == nil && b.Paused {
+			slog.Info("cron skipped: bot paused", "task", taskID)
+			return
+		}
+	}
 	if _, err := s.Trigger(taskID, "cron", 1); err != nil {
 		slog.Error("cron trigger", "task", taskID, "err", err)
 	}

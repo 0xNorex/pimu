@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"regexp"
 	"strconv"
 	"sync"
@@ -37,6 +38,7 @@ type Service struct {
 	st     *store.Store
 	hub    *hub.Hub
 	Max    int
+	Idle   time.Duration    // no pi event for this long (outside approval waits) → interrupted
 	Alert  func(store.Item) // inbox broadcast + Telegram
 	BotEnv func(botID string) []string
 
@@ -47,7 +49,11 @@ type Service struct {
 }
 
 func New(st *store.Store, h *hub.Hub, max int) *Service {
-	return &Service{st: st, hub: h, Max: max, wake: make(chan struct{}, 1), running: map[int64]context.CancelFunc{}}
+	idle := 10 * time.Minute
+	if n, err := strconv.Atoi(os.Getenv("PIMU_JOB_IDLE_SEC")); err == nil && n > 0 {
+		idle = time.Duration(n) * time.Second
+	}
+	return &Service{st: st, hub: h, Max: max, Idle: idle, wake: make(chan struct{}, 1), running: map[int64]context.CancelFunc{}}
 }
 
 // Extras gives a job session its env: the bot's dir, L2 gate, and the job id
@@ -201,9 +207,22 @@ func (s *Service) run(ctx context.Context, j store.Job) (status, result, errText
 	}
 
 	var stopReason, stopErr string
+	idle := time.NewTimer(s.Idle)
+	defer idle.Stop()
 	for done := false; !done; {
 		select {
+		case <-idle.C:
+			// Waiting on the user is not stalling; anything else this quiet is stuck.
+			if cur, err := s.st.Job(j.ID); err == nil && cur.Status == "waiting_approval" {
+				idle.Reset(s.Idle)
+				continue
+			}
+			actx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			_, _ = s.hub.Call(actx, r, map[string]any{"type": "abort"}, 5*time.Second)
+			cancel()
+			return "interrupted", "", fmt.Sprintf("%d 分钟没有任何进展，已停下", max(1, int(s.Idle.Minutes()))), tokens
 		case ev, ok := <-ch:
+			idle.Reset(s.Idle)
 			if !ok {
 				ch, _, _ = stream.Subscribe(stream.Seq()) // slow subscriber: keep going, tokens may undercount
 				continue
@@ -277,7 +296,7 @@ func (s *Service) finish(j store.Job, status, result, errText string, tokens int
 		s.Wake() // deliverPending tells the bot, so it does not think the job still runs
 		return
 	}
-	label := map[string]string{"completed": "完成", "failed": "失败"}[status]
+	label := map[string]string{"completed": "完成", "failed": "失败", "interrupted": "停下了"}[status]
 	it, isNew, err := s.st.AddItem(store.Item{BotID: j.BotID, JobID: j.ID, Kind: "notify", DedupKey: "job:done",
 		Title: fmt.Sprintf("后台任务%s：%s", label, j.Title), Body: clip(firstNonEmpty(result, errText), 2000)})
 	if err == nil && isNew && s.Alert != nil {
@@ -302,13 +321,15 @@ func (s *Service) deliver(j store.Job) {
 	switch j.Status {
 	case "failed":
 		body = "失败：" + firstNonEmpty(j.Error, "未知错误") + "\n\n" + j.Result
+	case "interrupted":
+		body = "停下了：" + firstNonEmpty(j.Error, "没有进展") + "。用户可以在 Bot 详情里重试。"
 	case "cancelled":
 		body = "用户取消了这个任务，没有结果。"
 	}
 	// The approval line comes from Pimu's records: the worker cannot see the
 	// gate's waits, so its own account of approvals may be wrong.
-	msg := fmt.Sprintf("[Pimu 后台任务 #%d「%s」已%s]\n\n%s\n\n%s（以 Pimu 记录为准，与任务自述不符时以此为准）\n\n（这是你之前用 pimu_task 派出去的任务，结果由 Pimu 自动送回。请用一两句话向用户汇报要点。）",
-		j.ID, j.Title, map[string]string{"completed": "完成", "failed": "失败", "cancelled": "取消"}[j.Status], body, j.Approvals.Line())
+	msg := fmt.Sprintf("[Pimu 后台任务 #%d「%s」已%s]\n\n%s\n\n%s（以 Pimu 记录为准，与任务自述不符时以此为准）\n\n（这是你之前用 pimu_task 派出去的任务，结果由 Pimu 自动送回。向用户只写结果本身和证据（文件路径、链接），一两句话；不要复述过程、任务编号或审批，除非有操作被拒绝。）",
+		j.ID, j.Title, map[string]string{"completed": "完成", "failed": "失败", "cancelled": "取消", "interrupted": "停下"}[j.Status], body, j.Approvals.Line())
 	resp, err := s.hub.Call(ctx, r, map[string]any{"type": "prompt", "message": msg, "streamingBehavior": "followUp"}, callWait)
 	if err != nil || !resp.Success {
 		slog.Warn("deliver job failed, will retry", "job", j.ID, "err", firstErr(err, resp.Error))

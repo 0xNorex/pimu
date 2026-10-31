@@ -206,3 +206,16 @@ func TestDeliveryCarriesApprovalCounts(t *testing.T) {
 		t.Fatalf("delivered: %s %v", resp.Data, err)
 	}
 }
+
+func TestIdleWatchdogInterrupts(t *testing.T) {
+	e := setup(t, 1, nil)
+	e.js.Idle = 400 * time.Millisecond
+	j, _, _ := e.js.Create(e.bot, "stuck", "SLEEP")
+	got := e.wait(t, j.ID, status("interrupted"))
+	if !strings.Contains(got.Error, "没有任何进展") {
+		t.Fatalf("reason %q", got.Error)
+	}
+	if _, _, err := e.js.Rerun(j.ID); err != nil {
+		t.Fatalf("an interrupted job must be rerunnable: %v", err)
+	}
+}

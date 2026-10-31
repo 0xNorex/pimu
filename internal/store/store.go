@@ -61,7 +61,7 @@ CREATE TABLE bots (
   archived     INTEGER NOT NULL DEFAULT 0,
   created_at   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
-`, goalsSchema, jobsSchema, approvalsSchema, botModeSchema, inboxIndexSchema}
+`, goalsSchema, jobsSchema, approvalsSchema, botModeSchema, inboxIndexSchema, botPausedSchema}
 
 type Store struct{ db *sql.DB }
 
@@ -287,7 +287,8 @@ type Bot struct {
 	Persona     string `json:"persona"`
 	Cwd         string `json:"cwd"`
 	Archived    bool   `json:"archived"`
-	Mode        string `json:"mode"` // trusted (native pi) | guarded (L2 gate on the main session)
+	Mode        string `json:"mode"`   // trusted (native pi) | guarded (L2 gate on the main session)
+	Paused      bool   `json:"paused"` // stops heartbeats, scheduled tasks and goal actions
 	CreatedAt   string `json:"createdAt"`
 }
 
@@ -300,6 +301,9 @@ const (
 // botModeSchema adds the per-bot safety mode.
 const botModeSchema = `ALTER TABLE bots ADD COLUMN mode TEXT NOT NULL DEFAULT 'trusted';`
 
+// botPausedSchema adds the per-bot "pause all background activity" switch.
+const botPausedSchema = `ALTER TABLE bots ADD COLUMN paused INTEGER NOT NULL DEFAULT 0;`
+
 // inboxIndexSchema indexes the inbox for per-job approval counts (job list),
 // the unread badge and the expiry sweep.
 const inboxIndexSchema = `
@@ -307,11 +311,11 @@ CREATE INDEX inbox_job ON inbox(job_id) WHERE job_id IS NOT NULL;
 CREATE INDEX inbox_status ON inbox(status);
 `
 
-const botCols = `session_id, name, description, persona, cwd, archived, mode, created_at`
+const botCols = `session_id, name, description, persona, cwd, archived, mode, paused, created_at`
 
 func scanBot(r scanner) (Bot, error) {
 	var b Bot
-	err := r.Scan(&b.SessionID, &b.Name, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.Mode, &b.CreatedAt)
+	err := r.Scan(&b.SessionID, &b.Name, &b.Description, &b.Persona, &b.Cwd, &b.Archived, &b.Mode, &b.Paused, &b.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		err = ErrNotFound
 	}
@@ -340,16 +344,16 @@ func (s *Store) Bot(id string) (Bot, error) {
 }
 
 func (s *Store) CreateBot(b Bot) (Bot, error) {
-	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, description, persona, cwd, archived, mode) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		b.SessionID, b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode)); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO bots (session_id, name, description, persona, cwd, archived, mode, paused) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		b.SessionID, b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode), b.Paused); err != nil {
 		return Bot{}, err
 	}
 	return s.Bot(b.SessionID)
 }
 
 func (s *Store) UpdateBot(b Bot) (Bot, error) {
-	res, err := s.db.Exec(`UPDATE bots SET name=?, description=?, persona=?, cwd=?, archived=?, mode=? WHERE session_id=?`,
-		b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode), b.SessionID)
+	res, err := s.db.Exec(`UPDATE bots SET name=?, description=?, persona=?, cwd=?, archived=?, mode=?, paused=? WHERE session_id=?`,
+		b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode), b.Paused, b.SessionID)
 	if err != nil {
 		return Bot{}, err
 	}

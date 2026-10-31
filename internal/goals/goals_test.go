@@ -256,3 +256,40 @@ func TestGuardedBotGetsModeEnv(t *testing.T) {
 		t.Fatal("guarded bot lacks PIMU_MODE")
 	}
 }
+
+func TestPauseStopsBeatsAndActions(t *testing.T) {
+	f := setup(t)
+	bot, _ := f.st.Bot("pm-b")
+	bot.Paused = true
+	if _, err := f.st.UpdateBot(bot); err != nil {
+		t.Fatal(err)
+	}
+	if r := f.gs.Precheck(f.goal(t), true); r != "Bot 已暂停" {
+		t.Fatalf("paused precheck: %q", r)
+	}
+	// A beat that was already running when the bot was paused has no effect.
+	text := "```pimu\n{\"do\":\"notify\",\"key\":\"k\",\"title\":\"hi\"}\n```"
+	if got := f.gs.apply(f.goal(t), bot, 1, text); got != "noop(paused)" {
+		t.Fatalf("outcome %q", got)
+	}
+	if items, _ := f.st.Items("pm-b", false, 10); len(items) != 0 {
+		t.Fatalf("%d items while paused", len(items))
+	}
+}
+
+func TestCapWarnOncePerDay(t *testing.T) {
+	f := setup(t)
+	b, _ := f.st.StartBeat(f.g.ID)
+	_ = f.st.FinishBeat(b, "ok", 700, "noop", "")
+	f.gs.capWarn(f.goal(t))
+	if items, _ := f.st.Items("pm-b", false, 10); len(items) != 0 {
+		t.Fatalf("70%%: %d items", len(items))
+	}
+	b, _ = f.st.StartBeat(f.g.ID)
+	_ = f.st.FinishBeat(b, "ok", 150, "noop", "")
+	f.gs.capWarn(f.goal(t))
+	f.gs.capWarn(f.goal(t))
+	if items, _ := f.st.Items("pm-b", false, 10); len(items) != 1 || !strings.Contains(items[0].Title, "额度快用完") {
+		t.Fatalf("85%%: %+v", items)
+	}
+}

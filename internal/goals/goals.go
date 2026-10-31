@@ -271,6 +271,9 @@ func (s *Service) Precheck(g store.Goal, force bool) string {
 	if !g.Enabled {
 		return "目标已停用"
 	}
+	if b, err := s.st.Bot(g.BotID); err == nil && b.Paused {
+		return "Bot 已暂停"
+	}
 	if !inHours(g.ActiveHours, now) {
 		return "不在活跃时段 " + g.ActiveHours
 	}
@@ -540,6 +543,11 @@ wait:
 
 // apply executes the actions and returns a short outcome ("noop", "notify,state").
 func (s *Service) apply(g store.Goal, bot store.Bot, beat int64, text string) string {
+	// Paused while this beat ran: drop its actions so pausing truly stops everything.
+	if b, err := s.st.Bot(bot.SessionID); err == nil && b.Paused {
+		s.log(g, fmt.Sprintf("beat #%d: bot paused, actions dropped", beat))
+		return "noop(paused)"
+	}
 	acts, err := parseActions(text)
 	if err != nil {
 		s.log(g, fmt.Sprintf("beat #%d: action block unreadable (%v), treated as noop", beat, err))
@@ -632,7 +640,31 @@ func (s *Service) finish(g store.Goal, beat int64, status string, tokens int, ou
 			}
 		}
 	}
+	s.capWarn(g)
 	s.hub.Broadcast(map[string]any{"type": "goal_update", "goalId": g.ID})
+}
+
+// capWarn files one inbox reminder a day once a goal has used 80% of its
+// daily token budget, so the cap never surprises anyone.
+func (s *Service) capWarn(g store.Goal) {
+	if g.DayTokens <= 0 {
+		return
+	}
+	now := s.Now()
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	used, _, _, err := s.st.BeatStats(g.ID, day, now.Add(-time.Hour))
+	if err != nil || used*5 < g.DayTokens*4 {
+		return
+	}
+	bot, err := s.st.Bot(g.BotID)
+	if err != nil {
+		return
+	}
+	if it, isNew, err := s.st.AddItem(store.Item{GoalID: g.ID, Kind: "notify", DedupKey: "cap:" + day.Format("2006-01-02"),
+		Title: fmt.Sprintf("目标「%s」今天的额度快用完了", g.Title),
+		Body:  fmt.Sprintf("已用 %d%%，用完后今天不再检查。可以在 Bot 详情里调高每日上限。", min(100, used*100/g.DayTokens))}); err == nil && isNew {
+		s.alert(bot, it)
+	}
 }
 
 func (s *Service) log(g store.Goal, line string) {
