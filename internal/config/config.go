@@ -20,7 +20,8 @@ type Config struct {
 	Workdirs    []string
 	IdleTimeout time.Duration
 	MaxProcs    int
-	MaxJobs     int // background jobs (pimu_task) running at once
+	MaxJobs     int           // background jobs (pimu_task) running at once
+	JobIdle     time.Duration // a job with no pi progress for this long is interrupted
 	LogLevel    string
 	AgentDir    string // $PI_CODING_AGENT_DIR or ~/.pi/agent
 	SessionDir  string // $PI_CODING_AGENT_SESSION_DIR or <AgentDir>/sessions
@@ -97,6 +98,11 @@ func Load(requireAuth bool) (*Config, error) {
 	}
 	if c.MaxJobs, err = strconv.Atoi(env("PIMU_MAX_JOBS", "1")); err != nil || c.MaxJobs < 1 {
 		return nil, fmt.Errorf("PIMU_MAX_JOBS must be a positive integer")
+	}
+	// read here: serve() scrubs every PIMU_* variable right after Load
+	c.JobIdle = 10 * time.Minute
+	if n, err := strconv.Atoi(env("PIMU_JOB_IDLE_SEC", "")); err == nil && n > 0 {
+		c.JobIdle = time.Duration(n) * time.Second
 	}
 	return c, nil
 }

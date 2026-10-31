@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"regexp"
 	"strconv"
 	"sync"
@@ -49,11 +48,7 @@ type Service struct {
 }
 
 func New(st *store.Store, h *hub.Hub, max int) *Service {
-	idle := 10 * time.Minute
-	if n, err := strconv.Atoi(os.Getenv("PIMU_JOB_IDLE_SEC")); err == nil && n > 0 {
-		idle = time.Duration(n) * time.Second
-	}
-	return &Service{st: st, hub: h, Max: max, Idle: idle, wake: make(chan struct{}, 1), running: map[int64]context.CancelFunc{}}
+	return &Service{st: st, hub: h, Max: max, Idle: 10 * time.Minute, wake: make(chan struct{}, 1), running: map[int64]context.CancelFunc{}}
 }
 
 // Extras gives a job session its env: the bot's dir, L2 gate, and the job id

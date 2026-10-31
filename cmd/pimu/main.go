@@ -98,6 +98,7 @@ func serve() error {
 	tk := tasks.New(st, h, tg, cfg.PublicURL)
 	gs := goals.New(st, h, tk, tg, cfg.DataDir, cfg.PublicURL, cfg.Addr)
 	js := jobs.New(st, h, cfg.MaxJobs)
+	js.Idle = cfg.JobIdle
 	js.Alert = gs.Alert
 	js.BotEnv = func(bot string) []string {
 		return []string{"PIMU_BOT_DIR=" + gs.BotDir(bot), "PIMU_API=http://" + cfg.Addr}
