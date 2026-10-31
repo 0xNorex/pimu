@@ -24,6 +24,8 @@ function flatten(messages: Message[], draft: AssistantMessage | null, tools: Rec
 
   const flat: Item[] = []
   const all = draft ? [...messages, draft] : messages
+  // While a turn is still running, an error in it is pi retrying: not news yet.
+  const turnStart = all.findLastIndex((m) => m.role === 'user')
   all.forEach((m, mi) => {
     const k = `${mi}-${m.timestamp}`
     if (m.role === 'compactionSummary') {
@@ -64,7 +66,7 @@ function flatten(messages: Message[], draft: AssistantMessage | null, tools: Rec
         })
       }
     })
-    if (m.stopReason === 'error' && m.errorMessage) flat.push({ kind: 'error', key: `${k}-err`, text: m.errorMessage })
+    if (m.stopReason === 'error' && m.errorMessage && !(streaming && mi > turnStart)) flat.push({ kind: 'error', key: `${k}-err`, text: m.errorMessage })
     if (m.stopReason === 'aborted') flat.push({ kind: 'aborted', key: `${k}-abort` })
   })
   return flat
