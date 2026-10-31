@@ -355,6 +355,18 @@ func (s *Store) CreateBot(b Bot) (Bot, error) {
 	return s.Bot(b.SessionID)
 }
 
+// DeleteBot removes a bot row; only for drafts that never got a message.
+func (s *Store) DeleteBot(id string) error {
+	res, err := s.db.Exec(`DELETE FROM bots WHERE session_id=?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) UpdateBot(b Bot) (Bot, error) {
 	res, err := s.db.Exec(`UPDATE bots SET name=?, description=?, persona=?, cwd=?, archived=?, mode=?, paused=? WHERE session_id=?`,
 		b.Name, b.Description, b.Persona, b.Cwd, b.Archived, botMode(b.Mode), b.Paused, b.SessionID)

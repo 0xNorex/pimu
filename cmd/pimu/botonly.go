@@ -82,6 +82,9 @@ func sweep(ctx context.Context, cfg *config.Config, st *store.Store, h *hub.Hub)
 			slog.Error("bot sessions", "err", err)
 		}
 		for _, b := range bots {
+			if dropDraft(st, h, b, time.Hour) {
+				continue
+			}
 			if _, err := h.MoveToBotDir(b.SessionID); err != nil && !busy(err) {
 				slog.Warn("move bot session", "session", b.SessionID, "err", err)
 			}
@@ -93,6 +96,26 @@ func sweep(ctx context.Context, cfg *config.Config, st *store.Store, h *hub.Hub)
 		case <-t.C:
 		}
 	}
+}
+
+// dropDraft deletes a bot made with '+' that never got a message (no name, no
+// conversation file) once it is older than ttl, so abandoned drafts don't pile up.
+func dropDraft(st *store.Store, h *hub.Hub, b store.Bot, ttl time.Duration) bool {
+	if b.Name != "" || b.SessionID == store.AssistantID || h.Running(b.SessionID) != nil {
+		return false
+	}
+	if t, err := time.Parse(time.RFC3339Nano, b.CreatedAt); err != nil || time.Since(t) < ttl {
+		return false
+	}
+	if files, _ := filepath.Glob(filepath.Join(h.BotSessionDir(b.SessionID), "*.jsonl")); len(files) > 0 {
+		return false
+	}
+	if err := st.DeleteBot(b.SessionID); err != nil {
+		slog.Warn("drop draft bot", "bot", b.SessionID, "err", err)
+		return false
+	}
+	_ = os.RemoveAll(filepath.Dir(h.BotSessionDir(b.SessionID)))
+	return true
 }
 
 func busy(err error) bool { return errors.Is(err, hub.ErrStreaming) || errors.Is(err, hub.ErrLocked) }

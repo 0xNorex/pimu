@@ -239,6 +239,7 @@ func (s *Server) handlePrompt(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 409, "topic", "这是以前的话题，先点「继续这个话题」")
 		return
 	}
+	s.nameDraft(r.PathValue("id"), body.Message)
 	run, err := s.hub.Ensure(r.Context(), r.PathValue("id"))
 	if err != nil {
 		s.hubErr(w, err)

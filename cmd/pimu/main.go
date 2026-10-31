@@ -142,7 +142,7 @@ func serve() error {
 		if b.Persona != "" {
 			args = append(args, "--append-system-prompt", b.Persona)
 		}
-		if info, ok := h.Idx.Find(id); !ok || info.Name != b.Name {
+		if info, ok := h.Idx.Find(id); b.Name != "" && (!ok || info.Name != b.Name) {
 			args = append(args, "--name", b.Name)
 		}
 		return b.Cwd, args, env, true

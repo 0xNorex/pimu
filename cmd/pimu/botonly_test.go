@@ -73,3 +73,32 @@ func TestAssistantAndPlainMigration(t *testing.T) {
 		t.Fatal("later session moved")
 	}
 }
+
+func TestDropDraft(t *testing.T) {
+	tmp := t.TempDir()
+	cfg := &config.Config{PiBin: os.Args[0], AgentDir: filepath.Join(tmp, "agent"), SessionDir: filepath.Join(tmp, "sessions"), DataDir: filepath.Join(tmp, "data"), MaxProcs: 2, IdleTimeout: time.Minute, Workdirs: []string{"/work"}}
+	os.MkdirAll(cfg.DataDir, 0o700)
+	st, err := store.Open(cfg.DataDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	h := hub.New(cfg)
+	draft, _ := st.CreateBot(store.Bot{SessionID: "pm-draft", Cwd: "/work"})
+	used, _ := st.CreateBot(store.Bot{SessionID: "pm-used", Cwd: "/work"})
+	named, _ := st.CreateBot(store.Bot{SessionID: "pm-named", Name: "x", Cwd: "/work"})
+	os.MkdirAll(h.BotSessionDir("pm-used"), 0o700)
+	os.WriteFile(filepath.Join(h.BotSessionDir("pm-used"), "a_pm-used.jsonl"), []byte("{}\n"), 0o600)
+	if dropDraft(st, h, draft, time.Hour) {
+		t.Fatal("a fresh draft must stay")
+	}
+	for _, b := range []store.Bot{draft, used, named} {
+		got := dropDraft(st, h, b, 0)
+		if want := b.SessionID == "pm-draft"; got != want {
+			t.Errorf("%s dropped=%v", b.SessionID, got)
+		}
+	}
+	if _, err := st.Bot("pm-draft"); err == nil {
+		t.Fatal("draft still in the store")
+	}
+}

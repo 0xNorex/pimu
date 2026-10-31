@@ -53,6 +53,9 @@ func (s *Server) handleBotList(w http.ResponseWriter, r *http.Request) {
 	running, _ := s.st.RunningJobs() // best effort: the ring is cosmetic
 	out := make([]botOut, 0, len(bots))
 	for _, b := range bots {
+		if b.Name == "" {
+			continue // a draft: shown once its first message names it
+		}
 		o := s.botOut(b, infos)
 		o.JobsRunning = running[b.SessionID]
 		out = append(out, o)
@@ -80,9 +83,6 @@ func (s *Server) botErr(w http.ResponseWriter, err error) {
 func (s *Server) validBot(b *store.Bot) string {
 	b.Name = strings.TrimSpace(b.Name)
 	b.Description, b.Persona = strings.TrimSpace(b.Description), strings.TrimSpace(b.Persona)
-	if b.Name == "" {
-		return "名字不能为空"
-	}
 	if len([]rune(b.Name)) > 40 || len([]rune(b.Description)) > 120 || len(b.Persona) > 16<<10 {
 		return "名字 ≤40 字、简介 ≤120 字、人设 ≤16 KB"
 	}
@@ -95,8 +95,10 @@ func (s *Server) validBot(b *store.Bot) string {
 }
 
 // handleBotCreate makes a new bot: a fresh pi session id, started lazily on
-// the first message. The name is required; the cwd defaults to the first
-// workdir.
+// the first message. Everything is optional: a bot without a name is a draft
+// ('+' in the UI), hidden from the list until its first message names it
+// (autoTitle) and removed by the sweep if it never gets one. The cwd defaults
+// to the first workdir.
 func (s *Server) handleBotCreate(w http.ResponseWriter, r *http.Request) {
 	var b store.Bot
 	if !readJSON(w, r, &b) {
@@ -134,6 +136,10 @@ func (s *Server) handleBotPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	b.SessionID = old.SessionID
+	if b.Name = strings.TrimSpace(b.Name); b.Name == "" && old.Name != "" {
+		writeErr(w, 400, "invalid", "名字不能为空")
+		return
+	}
 	if b.SessionID == store.AssistantID && b.Archived {
 		writeErr(w, 400, "invalid", "默认助手不能归档")
 		return
