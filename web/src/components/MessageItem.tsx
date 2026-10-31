@@ -71,7 +71,7 @@ export function MessageItem({ item, expand = false, onRetry, onJob }: { item: It
       const { body, files } = splitAttachments(item.text)
       return (
         <div className="flex justify-end">
-          <div className="flex max-w-[85%] flex-col items-end gap-1.5">
+          <div className="flex min-w-0 max-w-[85%] flex-col items-end gap-1.5">
             {item.images.length > 0 && (
               <div className="flex flex-wrap justify-end gap-1.5">
                 {item.images.map((im, i) => (
@@ -79,7 +79,7 @@ export function MessageItem({ item, expand = false, onRetry, onJob }: { item: It
                 ))}
               </div>
             )}
-            {body && <div className="rounded-[calc(var(--radius)*1.66)] rounded-br-md bg-bubble px-3.5 py-2 break-words whitespace-pre-wrap text-bubble-foreground shadow-soft">{body}</div>}
+            {body && <div className="rounded-[calc(var(--radius)*1.66)] rounded-br-md bg-bubble px-3.5 py-2 max-w-full whitespace-pre-wrap [overflow-wrap:anywhere] text-bubble-foreground shadow-soft">{body}</div>}
             {files.map((f) => (
               <div key={f.path} title={f.path} className="flex max-w-full items-center gap-2 rounded-xl border bg-card px-3 py-2 text-sm shadow-soft">
                 <FileIcon className="size-4 shrink-0 text-muted-foreground" />
