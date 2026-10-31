@@ -145,7 +145,7 @@ export function ChatView({ id }: { id: string }) {
     if (await patchBot({ cwd })) {
       rememberDir(cwd)
       refreshDetail()
-      toast.success('工作目录已改', { description: '从下一个新话题起生效' })
+      toast.success('工作目录已改', draft ? undefined : { description: '从下一个新话题起生效' })
       return true
     }
     return false
@@ -289,7 +289,7 @@ export function ChatView({ id }: { id: string }) {
             }}
           />
         ) : bot ? (
-          <button type="button" className="min-w-0 truncate rounded-md px-1.5 py-1 text-left text-[15px] font-medium hover:bg-foreground/[0.04] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" onClick={() => setRenaming(true)} aria-label="改名" title="点一下改名">
+          <button type="button" className="min-h-11 min-w-0 truncate rounded-md px-1.5 text-left text-[15px] font-medium lg:min-h-9 hover:bg-foreground/[0.04] focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none" onClick={() => setRenaming(true)} aria-label="改名" title="点一下改名">
             {title ? (
               <span key={title} className="title-in">
                 {title}
