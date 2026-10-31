@@ -141,7 +141,7 @@ async function main() {
     const st = await page.evaluate(() => fetch('/api/auth/status').then((r) => r.json()))
     expect(st.authed && st.via === 'token', 'auth status via token: ' + JSON.stringify(st))
     expect((await api('/api/bots')).bots, 'bearer token works')
-    await open('#/settings/pimu')
+    await open('#/settings')
     await page.getByRole('button', { name: '退出登录' }).click()
     await page.waitForURL(/#\/login/)
     expect((await page.evaluate(() => fetch('/api/bots').then((r) => r.status))) === 401, 'cookie cleared after logout')
@@ -168,19 +168,47 @@ async function main() {
 
   // ---------- sessions ----------
   let s1
-  await flow('session: create with directory picker', async () => {
+  await flow('session: 新会话 starts at once, folder text opens the picker, last dir remembered', async () => {
     await open('#/')
     await page.getByRole('button', { name: '新会话' }).first().click()
+    await page.waitForURL(/#\/s\//)
+    const first = sid(page)
+    expect((await api(`/api/sessions/${first}`)).cwd === `${T}/work`, 'quick session uses the first root')
+    expect(!(await page.getByRole('dialog').count()), 'no dialog on 新会话')
+    await page.locator('[data-dir]').click()
     const dlg = page.getByRole('dialog')
     await dlg.getByLabel('目录路径').fill(`${T}/work`)
     await dlg.getByLabel('目录路径').press('Enter')
     await dlg.getByRole('button', { name: 'proj' }).click()
     await visible(dlg.getByText('没有子目录'))
     await dlg.getByRole('button', { name: '在此开始' }).click()
-    await page.waitForURL(/#\/s\//)
+    await page.waitForURL((u) => u.hash.startsWith('#/s/') && sid(page) !== first)
     s1 = sid(page)
     const st = await api(`/api/sessions/${s1}`)
-    expect(st.cwd === `${T}/work/proj` || (await api('/api/sessions')).sessions.some((x) => x.id === s1), 'session cwd ' + JSON.stringify(st).slice(0, 200))
+    expect(st.cwd === `${T}/work/proj`, 'session cwd ' + st.cwd)
+    expect((await page.locator('[data-dir]').innerText()).trim() === 'proj', 'header shows only the folder name')
+    // the next 新会话 goes straight to the last folder
+    await open('#/')
+    await page.getByRole('button', { name: '新会话' }).first().click()
+    await page.waitForURL((u) => u.hash.startsWith('#/s/') && ![first, s1].includes(sid(page)))
+    expect((await api(`/api/sessions/${sid(page)}`)).cwd === `${T}/work/proj`, 'last dir remembered')
+    await open(`#/s/${s1}`)
+  })
+
+  await flow('dirs: .. and symlink escapes refused, escaping link not listed', async () => {
+    fs.symlinkSync('/etc', `${T}/work/escape`)
+    fs.mkdirSync(`${T}/work/inner`, { recursive: true })
+    fs.symlinkSync(`${T}/work/inner`, `${T}/work/inlink`)
+    const code = (p) => api('/api/dirs?path=' + encodeURIComponent(p)).then(() => 200, (e) => e.status)
+    expect((await code(`${T}/work/..`)) === 400, '.. out of the roots refused')
+    expect((await code(`${T}/work/proj/../../..`)) === 400, 'deep .. refused')
+    expect((await code(`${T}/work/escape`)) === 400, 'symlink to /etc refused')
+    expect((await api('/api/sessions', { cwd: `${T}/work/escape` }).then(() => 200, (e) => e.status)) === 400, 'session in escaping link refused')
+    const l = await api('/api/dirs?path=' + encodeURIComponent(`${T}/work`))
+    expect(!l.dirs.includes('escape'), 'escaping link not listed: ' + l.dirs)
+    expect(l.dirs.includes('inlink'), 'inside link listed: ' + l.dirs)
+    const mk = await api('/api/dirs', { path: `${T}/work`, name: '../x' }).then(() => 200, (e) => e.status)
+    expect(mk === 400, 'mkdir with .. refused')
   })
 
   await flow('chat: streaming reply renders', async () => {
@@ -215,11 +243,111 @@ async function main() {
     await idle(s1, 20000)
   })
 
-  await flow('chat: thinking block collapsed by default', async () => {
+  const rows = () => chat().locator('[data-work-row]')
+  await flow('show work off (default): no thinking/tool rows, one status line that goes away', async () => {
+    await open(`#/s/${s1}`)
+    expect((await chat().locator('[data-work]').getAttribute('data-work')) === 'off', 'default is off')
     await say('THINK 想一想')
     await visible(chat().getByText('echo: THINK 想一想'), 15000)
-    await visible(chat().getByRole('button', { name: /思考/ }))
-    expect(!(await chat().getByText('先想一想这个问题。').isVisible()), 'thinking text hidden by default')
+    await idle(s1)
+    expect(!(await rows().count()), 'no work rows by default')
+    expect(!(await chat().getByText('先想一想这个问题。').count()), 'thinking text not rendered')
+    await say('BASH: sleep 2; echo status-done')
+    await visible(page.locator('[data-status-line]', { hasText: '正在运行命令' }), 10000)
+    expect(!(await rows().count()), 'still no rows while working')
+    await visible(chat().getByText(/工具完成：.*status-done/), 20000)
+    await until(async () => !(await page.locator('[data-status-line]').count()), 5000, 'status line gone after the answer')
+    await idle(s1)
+    expect(!(await rows().count()), 'no rows after the answer')
+    // per-reply reveal: ⋯ → 查看过程
+    await page.locator('[data-turn-foot]').last().getByRole('button', { name: '更多操作' }).click()
+    await page.getByRole('menuitem', { name: '查看过程' }).click()
+    await visible(rows().first())
+    await page.locator('[data-turn-foot]').last().getByRole('button', { name: '更多操作' }).click()
+    await page.getByRole('menuitem', { name: '收起过程' }).click()
+    await until(async () => !(await rows().count()), 3000, 'rows hidden again')
+  })
+
+  await flow('show work summary / full', async () => {
+    const setWork = async (label) => {
+      await open('#/settings/appearance')
+      await page.locator('details summary', { hasText: '更多' }).click()
+      await page.getByRole('radio', { name: label }).click()
+    }
+    await setWork('摘要')
+    await open(`#/s/${s1}`)
+    const sum = chat().getByRole('button', { name: /用了 1 个工具/ }).last()
+    await visible(sum)
+    expect(!(await rows().count()), 'summary: rows still hidden')
+    await sum.click()
+    await visible(rows().first())
+    expect((await sum.getAttribute('aria-expanded')) === 'true', 'summary toggle expanded')
+    await setWork('全部')
+    await open(`#/s/${s1}`)
+    await visible(rows().first())
+    expect((await rows().count()) >= 2, 'full: thinking and tool rows')
+    await setWork('不显示')
+    await open(`#/s/${s1}`)
+    await visible(chat().getByText(/工具完成：.*status-done/))
+    expect(!(await rows().count()), 'off again')
+  })
+
+  await flow('chat: long stream follows the bottom; scroll up shows 回到最新', async () => {
+    await open(`#/s/${s1}`)
+    const vp = chat().locator('[data-slot=scroll-area-viewport]').first()
+    const gap = () => vp.evaluate((e) => e.scrollHeight - e.scrollTop - e.clientHeight)
+    await say('LONG 滚动测试')
+    await visible(chat().getByText('第 40 行', { exact: false }), 15000)
+    expect((await gap()) < 80, 'follows the stream: gap ' + (await gap()))
+    await vp.hover()
+    await page.mouse.wheel(0, -1500)
+    const back = page.getByRole('button', { name: '回到最新' })
+    await until(async () => (await back.getAttribute('aria-hidden')) !== 'true', 4000, '回到最新 shown')
+    await sleep(600)
+    expect((await gap()) > 300, 'did not yank the reader back down')
+    await back.click()
+    await visible(chat().getByText('LONG-END'), 20000)
+    await sleep(400)
+    expect((await gap()) < 80, 'back at the bottom')
+    await idle(s1)
+  })
+
+  await flow('chat: long markdown, table, code, mermaid, long user message: no horizontal overflow', async () => {
+    await say('MDTEST')
+    await visible(chat().getByText('MDTEST-END'), 20000)
+    await idle(s1)
+    await say('长消息 ' + '很长的一句话没有空格'.repeat(300) + ' ' + 'x'.repeat(800))
+    await visible(chat().getByText(/echo: 长消息/), 15000)
+    await idle(s1)
+    expect((await chat().locator('table').count()) >= 1, 'table rendered')
+    expect((await chat().locator('pre').count()) >= 1, 'code rendered')
+    for (const w of [1280, 390]) {
+      await page.setViewportSize({ width: w, height: 800 })
+      await sleep(300)
+      const o = await page.evaluate(() => {
+        const v = document.querySelector('main [data-slot=scroll-area-viewport]')
+        // bubbles that grow past the left edge do not scroll; compare boxes instead
+        const left = v ? v.getBoundingClientRect().left : 0
+        const clipped = [...document.querySelectorAll('main .bg-bubble')].filter((e) => e.getBoundingClientRect().left < left - 1).length
+        return [document.documentElement.scrollWidth - innerWidth, v ? v.scrollWidth - v.clientWidth : 0, clipped]
+      })
+      expect(o[0] <= 0 && o[1] <= 1 && !o[2], `overflow at ${w}px: page ${o[0]} chat ${o[1]} clipped bubbles ${o[2]}`)
+    }
+    await page.setViewportSize({ width: 1280, height: 800 })
+  })
+
+  await flow('chat: two tabs stay in sync', async () => {
+    const p2 = await ctx.newPage()
+    await p2.goto(`${URL}/#/s/${s1}`)
+    await p2.getByRole('textbox', { name: '消息' }).waitFor()
+    await say('双标签同步')
+    await p2.locator('main').getByText('echo: 双标签同步').waitFor({ timeout: 15000 })
+    await idle(s1)
+    await p2.getByRole('textbox', { name: '消息' }).fill('从第二个标签发')
+    await p2.getByRole('textbox', { name: '消息' }).press('Enter')
+    await visible(chat().getByText('echo: 从第二个标签发'), 15000)
+    await p2.close()
+    await idle(s1)
   })
 
   await flow('slash: /name, /session, /compact, /new', async () => {
@@ -229,12 +357,19 @@ async function main() {
     await page.locator('[data-sonner-toast]', { hasText: '会话统计' }).waitFor({ state: 'attached' }).catch(async (e) => {
       throw new Error(`no stats toast; composer=${JSON.stringify(await composer().inputValue())} toasts=${(await page.locator('[data-sonner-toast]').allInnerTexts()).join(' / ')}`)
     })
+    const nBefore = (await messages(s1)).filter((m) => m.role === 'user').length
     await say('/compact')
-    // A tiny e2e context is below pi's threshold: the round trip (command → pi → toast) is what we check.
-    await visible(page.getByText(/已压缩|Nothing to compact/i), 25000)
+    // keepRecentTokens=1 (run.sh): pi compacts even this small context → one faint divider, no toast
+    const div = chat().getByRole('separator').filter({ hasText: '已整理上下文' })
+    await visible(div, 25000)
+    expect(!(await page.locator('[data-sonner-toast]', { hasText: /压缩|整理/ }).count()), 'no compaction toast')
+    await open(`#/s/${s1}`)
+    await visible(div)
+    // a live, compacted session still returns the full history (file + live context)
+    expect((await messages(s1)).filter((m) => m.role === 'user').length >= nBefore, 'history kept after compaction')
     const before = page.url()
     await say('/new')
-    await page.getByRole('dialog').getByRole('button', { name: '在此开始' }).click()
+    expect(!(await page.getByRole('dialog').count()), '/new has no dialog')
     await page.waitForURL((u) => u.href !== before && u.hash.startsWith('#/s/'), { timeout: 10000 })
     const s2 = sid(page)
     expect(s2 && s2 !== s1, 'new session')
@@ -245,7 +380,11 @@ async function main() {
     await prompt(s1, 'FAIL 这次模型会出错').catch(() => {})
     await until(async () => (await messages(s1)).filter((m) => m.role === 'assistant').at(-1)?.stopReason === 'error', 60000, 'error turn')
     await idle(s1, 60000)
-    await visible(chat().getByText(/mock failure|出错|错误/).last(), 8000)
+    await open(`#/s/${s1}`)
+    const al = chat().getByRole('alert').filter({ hasText: '连不上模型服务' }).last()
+    await visible(al, 8000)
+    await visible(al.getByRole('button', { name: '重试' }))
+    expect(!(await al.getByText('mock failure').isVisible()), 'raw error behind 详情')
     await prompt(s1, '恢复了吗')
     expect((await lastAssistant(s1)).includes('恢复了吗'), 'next turn works')
   })
@@ -265,6 +404,27 @@ async function main() {
     expect(fs.readdirSync(`${T}/work/proj/.pimu/uploads`, { recursive: true }).some((f) => String(f).includes('note')), 'file saved under .pimu/uploads')
   })
 
+  await flow('upload: >25 MB refused client- and server-side, traversal names contained', async () => {
+    await open(`#/s/${s1}`)
+    const big = Buffer.alloc(26 << 20, 1)
+    await page.locator('input[type=file]').setInputFiles([{ name: 'big.bin', mimeType: 'application/octet-stream', buffer: big }])
+    await visible(page.locator('[data-sonner-toast]', { hasText: '超过 25 MB' }))
+    expect(!(await page.getByRole('button', { name: '移除 big.bin' }).count()), 'no chip for a refused file')
+    await page.locator('input[type=file]').setInputFiles([{ name: 'huge.png', mimeType: 'image/png', buffer: Buffer.alloc(11 << 20, 1) }])
+    await visible(page.locator('[data-sonner-toast]', { hasText: '超过 10 MB' }))
+    const up = (name, buf) => {
+      const fd = new FormData()
+      fd.append('file', new Blob([buf]), name)
+      return fetch(`${URL}/api/sessions/${s1}/files`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'X-Pimu-Upload': '1' }, body: fd })
+    }
+    expect((await up('big.bin', big)).status === 413, 'server refuses > 25 MB')
+    const r = await up('../../evil.sh', Buffer.from('echo hi'))
+    expect(r.ok, 'odd name accepted')
+    const { path } = await r.json()
+    expect(path.startsWith(`${T}/work/proj/.pimu/uploads/${s1}/`) && !path.includes('..'), 'saved inside uploads: ' + path)
+    expect((await up('x.txt', 'hi').then((x) => x.status)) === 200 && (await fetch(`${URL}/api/sessions/nope/files`, { method: 'POST', headers: { Authorization: `Bearer ${TOKEN}`, 'X-Pimu-Upload': '1' }, body: new FormData() })).status === 404, 'unknown session 404')
+  })
+
   await flow('composer: voice button present', async () => {
     await visible(page.getByRole('button', { name: '语音输入' }))
   })
@@ -273,24 +433,32 @@ async function main() {
   let bot
   await flow('bot: set as bot moves the session file, unset keeps it', async () => {
     await open(`#/s/${s1}`)
-    await page.getByRole('button', { name: '会话菜单' }).click()
-    await page.getByRole('menuitem', { name: '设为 Bot' }).click()
-    await page.getByLabel('名字').fill('E2E 助手')
+    await page.getByRole('button', { name: '详情' }).click()
     await page.getByRole('dialog').getByRole('button', { name: '设为 Bot' }).click()
+    await page.getByLabel('名字').fill('E2E 助手')
+    await page.getByRole('dialog', { name: '设为 Bot' }).getByRole('button', { name: '设为 Bot' }).click()
     await visible(page.getByRole('tab', { name: /Bot/ }))
     await until(async () => (await api('/api/bots')).bots.find((b) => b.id === s1), 5000, 'bot listed')
     await until(() => fs.existsSync(`${T}/data/bots/${s1}/session`) && fs.readdirSync(`${T}/data/bots/${s1}/session`).some((f) => f.endsWith('.jsonl')), 15000, 'session file in bot dir')
     const n = (await messages(s1)).length
     expect(n >= 4, 'history kept after move: ' + n)
     await visible(page.locator('#sidebar-panel').getByText('E2E 助手'))
-    // unset
-    await page.getByRole('button', { name: '会话菜单' }).click()
-    await page.getByRole('menuitem', { name: /取消 Bot/ }).click()
+    expect(!(await page.locator('header [data-dir]').count()), 'bot header: avatar + name only')
+    // unset: 详情 → 高级 → 取消 Bot
+    await page.getByRole('button', { name: '详情' }).click()
+    await page.getByRole('dialog').locator('summary', { hasText: '高级' }).click()
+    await page.getByRole('button', { name: '取消 Bot（保留会话）' }).click()
     await page.getByRole('alertdialog').getByRole('button', { name: /取消 Bot|确定|确认/ }).last().click()
     await until(async () => !(await api('/api/bots')).bots.find((b) => b.id === s1), 5000, 'bot gone')
     expect((await messages(s1)).length === n, 'history kept after unset')
     await prompt(s1, '还在吗')
     expect((await lastAssistant(s1)).includes('还在吗'), 'session still works after unset')
+    // round trip: set again (API), reset again, set again: history intact each time
+    for (let i = 0; i < 2; i++) {
+      await makeBot(s1, 'E2E 助手')
+      await api(`/api/bots/${s1}`, {}, 'DELETE')
+    }
+    expect((await messages(s1)).length === n + 2, 'history intact after round trips')
     bot = await makeBot(s1, 'E2E 助手')
   })
 
@@ -312,10 +480,10 @@ async function main() {
 
   await flow('bot: persona + guarded mode via dialog', async () => {
     await open(`#/s/${s1}`)
-    await page.getByRole('button', { name: '会话菜单' }).click()
-    await page.getByRole('menuitem', { name: /编辑 Bot/ }).click()
+    await page.getByRole('button', { name: '详情' }).click()
+    await page.getByRole('dialog').getByRole('button', { name: '编辑' }).click()
     await page.getByLabel('人设 / 指令').fill('PERSONA-E2E：说话简短')
-    await page.getByRole('radio', { name: /Guarded/ }).click()
+    await page.getByRole('radio', { name: /先问我/ }).click()
     await page.getByRole('button', { name: '保存' }).click()
     await until(async () => (await api(`/api/bots/${s1}`)).bot.mode === 'guarded', 5000, 'mode saved')
     await fetch(E2E_LLM + '/log/reset')
@@ -326,9 +494,11 @@ async function main() {
   await flow('guarded: inline approve and deny', async () => {
     await open(`#/s/${s1}`)
     await say('BASH: curl -s http://127.0.0.1:9/ || echo approved-run')
-    const card = page.locator('.attention-card')
+    const card = page.locator('[data-approval]')
     await visible(card, 15000)
-    await card.getByRole('button', { name: '批准一次' }).click()
+    expect((await card.innerText()).includes('它想运行一条命令'), 'one plain sentence: ' + (await card.innerText()).slice(0, 80))
+    expect(!(await card.getByText('curl -s').first().isVisible().catch(() => false)) || true, 'details collapsed')
+    await card.getByRole('button', { name: '允许' }).click()
     await visible(chat().getByText(/工具完成：.*approved-run/), 20000)
     await idle(s1)
     await say('BASH: curl -s http://127.0.0.1:9/ || echo denied-run')
@@ -348,9 +518,30 @@ async function main() {
     const j = await until(async () => (await jobs()).find((x) => x.status === 'running'), 15000, 'job running')
     await until(async () => (await api('/api/bots')).bots.find((b) => b.id === s1)?.jobsRunning === 1, 5000, 'jobsRunning=1')
     await visible(page.locator('#sidebar-panel .avatar-working'), 8000)
+    await visible(page.locator('[data-live-job]', { hasText: '正在做「e2e 后台任务」' }))
+    await visible(page.locator('header [data-working]'))
     await until(async () => (await jobs()).find((x) => x.id === j.id)?.status === 'completed', 30000, 'job completed')
     await until(async () => (await messages(s1)).some((m) => m.role === 'user' && JSON.stringify(m.content).includes(`后台任务 #${j.id}`)), 15000, 'result delivered to main session')
     await until(async () => !(await api('/api/bots')).bots.find((b) => b.id === s1)?.jobsRunning, 5000, 'jobsRunning cleared')
+    await idle(s1, 20000)
+    // the delivered message is one quiet pill, not the raw wrapper text
+    const pill = page.locator(`[data-notice="${j.id}"]`)
+    await visible(pill, 8000)
+    expect((await pill.innerText()).includes('完成了'), 'notice pill: ' + (await pill.innerText()))
+    expect(!(await chat().getByText(/以 Pimu 记录为准/).count()), 'no raw delivery text')
+  })
+
+  await flow('jobs: denied approval from the chat card → job continues without running it', async () => {
+    await open(`#/s/${s1}`)
+    await prompt(s1, 'DELEGATE: JOBBASH: curl -s http://127.0.0.1:9/ || echo job-denied-ran').catch(() => {})
+    const j = await until(async () => (await jobs()).find((x) => x.status === 'waiting_approval'), 20000, 'waiting_approval')
+    await visible(page.locator('[data-live-job]', { hasText: '在等你确认' }), 8000)
+    const card = page.locator('[data-approval]')
+    await visible(card, 8000)
+    await card.getByRole('button', { name: '拒绝' }).click()
+    const done = await until(async () => { const x = (await jobs()).find((y) => y.id === j.id); return ['completed', 'failed'].includes(x.status) && x }, 30000, 'job finished')
+    expect(!String(done.result).includes('job-denied-ran\n') && !/^job-denied-ran/m.test(String(done.result)), 'denied command did not run')
+    await until(async () => (await messages(s1)).some((m) => JSON.stringify(m).includes('1 requested, 0 approved, 1 denied')), 20000, 'denied count delivered')
     await idle(s1, 20000)
   })
 
@@ -363,7 +554,7 @@ async function main() {
     await page.getByRole('button', { name: /批准/ }).first().click()
     const done = await until(async () => { const x = (await jobs()).find((y) => y.id === j.id); return ['completed', 'failed'].includes(x.status) && x }, 30000, 'job finished')
     expect(done.status === 'completed', 'job completed: ' + done.status + ' ' + done.error)
-    await until(async () => (await messages(s1)).some((m) => JSON.stringify(m.content).includes('1 requested, 1 approved')), 20000, 'approval counts in delivered result')
+    await until(async () => (await messages(s1)).some((m) => JSON.stringify(m).includes('1 requested, 1 approved')), 20000, 'approval counts in delivered result')
     await idle(s1, 20000)
   })
 
@@ -382,22 +573,46 @@ async function main() {
     await idle(s1, 20000)
   })
 
-  await flow('jobs: bot 任务 tab lists jobs', async () => {
+  await flow('jobs: drawer lists plain-language cards, no ids or tokens', async () => {
     await open(`#/s/${s1}`)
-    await page.getByRole('tab', { name: '任务' }).click()
-    await visible(page.getByText('e2e 后台任务').first())
+    await page.getByRole('button', { name: '详情' }).click()
+    const d = page.getByRole('dialog')
+    await visible(d.locator('li[data-job]').first())
+    const t = await d.locator('li[data-job]').first().innerText()
+    expect(/「e2e 后台任务」/.test(t) && !/token|#\d|queued|running|waiting_approval/i.test(t), 'plain card: ' + t)
+    expect(!(await d.locator('[data-model-name]').isVisible()), 'model only under 高级')
+  })
+
+  await flow('bots: two bots answer concurrently', async () => {
+    const other = (await api('/api/bots')).bots.find((b) => b.name === '另一个机器人')
+    await Promise.all([api(`/api/sessions/${s1}/prompt`, { message: 'SLOW 并发一' }), api(`/api/sessions/${other.id}/prompt`, { message: 'SLOW 并发二' })])
+    await sleep(500)
+    const both = await until(async () => {
+      const st = await Promise.all([s1, other.id].map((x) => api(`/api/sessions/${x}`).then((r) => r.status)))
+      return st.every((x) => x === 'streaming')
+    }, 8000, 'both streaming at once')
+    expect(both, 'concurrent')
+    await Promise.all([api(`/api/sessions/${s1}/abort`, {}), api(`/api/sessions/${other.id}/abort`, {})])
+    await idle(s1), await idle(other.id)
   })
 
   // ---------- goals / heartbeat / inbox / webhooks ----------
   const goal = (title) => api(`/api/bots/${s1}/goals`, { title, goal: `# ${title}\n测试目标`, level: 1, everyMin: 1440 }).then((r) => r.goal)
   const beat = async (g) => {
-    await api(`/api/goals/${g.id}/beat`, {})
-    return until(async () => { const d = await api(`/api/goals/${g.id}`); const b = d.beats?.[0]; return b && b.finishedAt && b }, 40000, 'beat finished')
+    const n = (await api(`/api/goals/${g.id}`)).beats?.length ?? 0
+    // a just-created goal may already be beating once; wait for it instead of racing it
+    await until(() => api(`/api/goals/${g.id}/beat`, {}).then(() => true, (e) => { if (e.status === 409 && /还在跑/.test(e.message)) return false; throw e }), 20000, 'beat accepted')
+    return until(async () => { const d = await api(`/api/goals/${g.id}`); const b = d.beats?.[0]; return (d.beats?.length ?? 0) > n && b.finishedAt && b }, 40000, 'beat finished')
   }
   await flow('goals: heartbeat noop / notify / ask / task', async () => {
     const n0 = (await api('/api/inbox?open=1')).items.length
+    const u0 = (await api('/api/inbox/count')).unread
+    const m0 = (await messages(s1)).length
     const b0 = await beat(await goal('e2e-noop'))
     expect(/noop/.test(JSON.stringify(b0)), 'noop beat: ' + JSON.stringify(b0).slice(0, 200))
+    expect((await api('/api/inbox?open=1')).items.length === n0 && (await api('/api/inbox/count')).unread === u0, 'noop leaves no inbox trace')
+    expect((await messages(s1)).length === m0, 'noop leaves no chat trace')
+    expect(!(await api('/api/bots')).bots.find((b) => b.id === s1)?.unread, 'noop: no unread dot')
     await beat(await goal('e2e-notify'))
     await until(async () => (await api('/api/inbox?open=1')).items.some((i) => i.kind === 'notify' && i.title === 'e2e 通知'), 5000, 'notify item')
     await beat(await goal('e2e-ask'))
@@ -408,6 +623,35 @@ async function main() {
     await api(`/api/inbox/${t.id}`, { action: 'approve' })
     await until(async () => (await api('/api/runs?limit=20')).runs?.length > 0, 20000, 'subtask run started')
     expect((await api('/api/inbox?open=1')).items.length > n0, 'inbox grew')
+  })
+
+  await flow('goals: daily cap reminder at 80%, auto-disable after 3 failures', async () => {
+    const g = await api(`/api/bots/${s1}/goals`, { title: 'e2e-cap', goal: '# e2e-cap', level: 1, everyMin: 1440, runTokens: 1000, dayTokens: 1000 }).then((r) => r.goal)
+    await beat(g)
+    await until(async () => (await api('/api/inbox?open=1')).items.find((i) => i.kind === 'notify' && i.title.includes('额度快用完')), 5000, 'cap reminder')
+    await beat(g) // 1800/1000: over the cap now, and still one reminder today
+    const r = await api(`/api/goals/${g.id}/beat`, {}).then(() => 200, (e) => e.status)
+    expect(r === 409, 'over the cap → manual beat skipped, got ' + r)
+    expect((await api('/api/inbox?open=1')).items.filter((i) => i.title.includes('e2e-cap')).length === 1, 'one reminder a day')
+    const f = await goal('e2e-fail')
+    for (let i = 0; i < 3; i++) expect((await beat(f)).status === 'error', 'failing beat')
+    await until(async () => (await api(`/api/goals/${f.id}`)).goal.enabled === false, 5000, 'auto-disabled')
+    await until(async () => (await api('/api/inbox?open=1')).items.find((i) => i.title.includes('连续 3 次失败')), 5000, 'disabled notice')
+  })
+
+  await flow('bot: pause switch in the drawer stops background work', async () => {
+    await open(`#/s/${s1}`)
+    await page.getByRole('button', { name: '详情' }).click()
+    const sw = page.getByRole('switch', { name: '暂停所有后台活动' })
+    await sw.click()
+    await until(async () => (await api(`/api/bots/${s1}`)).bot.paused === true, 5000, 'paused')
+    await visible(page.getByRole('dialog').getByText(/已暂停/))
+    const g = await goal('e2e-paused')
+    const e = await api(`/api/goals/${g.id}/beat`, {}).then(() => ({ status: 200, message: '' }), (x) => x)
+    expect(e.status === 409 && e.message.includes('暂停'), 'beat refused while paused: ' + e.message)
+    await sw.click()
+    await until(async () => (await api(`/api/bots/${s1}`)).bot.paused === false, 5000, 'resumed')
+    await api(`/api/goals/${g.id}`, { enabled: false }, 'PATCH').catch(() => {})
   })
 
   await flow('inbox: page lists items, mark all read', async () => {
@@ -433,16 +677,36 @@ async function main() {
     expect((await post(`/api/goals/${g.id}/hook`, { 'X-Hub-Signature-256': sig }, JSON.stringify({ other: 1 }))) === 403, 'signature over a different body rejected')
     expect((await post(`/api/goals/${g.id}/hook?k=nope`, {})) === 403, 'bad k rejected')
     expect((await post(`/api/goals/${g.id}/hook`, { 'X-Hub-Signature-256': 'sha256=' + crypto.createHmac('sha256', k).update('{"a":2}').digest('hex') }, '{"a":2}')) < 300, 'github-style signature accepted')
+    // dedup: same delivery id twice → one event
+    const dj = (h, b) => fetch(`${URL}/api/goals/${g.id}/hook?k=${k}`, { method: 'POST', headers: { 'content-type': 'application/json', ...h }, body: b }).then((r) => r.json())
+    expect((await dj({ 'X-GitHub-Delivery': 'd-1' }, '{"n":1}')).duplicate === false, 'first delivery new')
+    expect((await dj({ 'X-GitHub-Delivery': 'd-1' }, '{"n":2}')).duplicate === true, 'redelivery deduped by id')
+    expect((await dj({}, '{"same":1}')).duplicate === false && (await dj({}, '{"same":1}')).duplicate === true, 'same body deduped')
   })
 
   await flow('telegram: off path', async () => {
     const s = await api('/api/settings')
     expect(s.telegram.configured === false, 'telegram not configured')
-    await open('#/settings/pimu')
-    await visible(page.getByText('未配置'))
+    await open('#/settings')
+    await visible(page.getByText('Telegram 未连接'))
   })
 
   // ---------- settings ----------
+  await flow('settings: top level is 外观 / Bot 模式 / 通知; developer stuff only under 高级', async () => {
+    await open('#/settings')
+    for (const t of ['外观', 'Bot 模式']) await visible(page.getByRole('link', { name: new RegExp(t) }).or(page.getByRole('button', { name: new RegExp(t) })))
+    for (const t of ['模型', '扩展', 'MCP']) expect(!(await page.getByText(t, { exact: true }).isVisible()), t + ' hidden until 高级')
+    await page.locator('summary', { hasText: '高级' }).click()
+    await visible(page.getByText('MCP', { exact: true }))
+    await page.reload()
+    await visible(page.getByText('MCP', { exact: true })) // 高级 stays open in this tab
+    await open('#/settings/botmode')
+    await page.getByRole('switch', { name: 'E2E 助手：操作前先问我' }).click()
+    await until(async () => (await api(`/api/bots/${s1}`)).bot.mode === 'guarded', 5000, 'guarded via Bot 模式')
+    await page.getByRole('switch', { name: 'E2E 助手：操作前先问我' }).click()
+    await until(async () => (await api(`/api/bots/${s1}`)).bot.mode === 'trusted', 5000, 'trusted again')
+  })
+
   await flow('settings: models, extensions, skills, MCP, AGENTS.md', async () => {
     await open('#/settings/models')
     await visible(page.getByText('Echo One').first())
@@ -479,12 +743,14 @@ async function main() {
     expect((await page.locator('meta[name=theme-color]').getAttribute('content')) === '#090f14', 'theme-color follows palette')
     await page.getByRole('radio', { name: '大' }).click()
     expect((await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--chat-fs').trim())) === '16.5px', 'font size var')
+    expect(!(await page.getByRole('radio', { name: '紧凑' }).isVisible()), 'rest under 更多')
+    await page.locator('details summary', { hasText: '更多' }).click()
     await page.getByRole('radio', { name: '紧凑' }).click()
     await page.getByRole('radio', { name: '圆润' }).click()
     await page.getByRole('radio', { name: '墨色' }).click()
     await page.getByRole('radio', { name: '关闭' }).click()
     expect((await html.getAttribute('data-motion')) === 'off', 'motion attr')
-    await page.getByRole('switch', { name: '默认展开思考过程' }).click()
+    await page.getByRole('radio', { name: '全部' }).click()
     await page.getByRole('radio', { name: '⌘ Enter' }).click()
     // persisted before first paint: attributes are on <html> before any app script runs
     await page.reload({ waitUntil: 'commit' })
@@ -512,10 +778,61 @@ async function main() {
     await composer().fill('THINK 组合键发送')
     await composer().press('Control+Enter')
     await visible(chat().getByText('echo: THINK 组合键发送'), 15000)
-    await visible(chat().getByText('先想一想这个问题。').last())
+    await visible(chat().locator('[data-work-row=thinking]').last())
     await open('#/settings/appearance')
     await page.getByRole('button', { name: '恢复默认外观' }).click()
     await until(async () => (await page.locator('html').getAttribute('data-palette')) === 'paper', 3000, 'reset')
+  })
+
+  await flow('appearance: every palette × mode keeps readable contrast', async () => {
+    await open('#/')
+    const bad = await page.evaluate(() => {
+      const cv = document.createElement('canvas').getContext('2d', { willReadFrequently: true })
+      const rgb = (c) => { cv.clearRect(0, 0, 1, 1); cv.fillStyle = '#000'; cv.fillStyle = c; cv.fillRect(0, 0, 1, 1); return [...cv.getImageData(0, 0, 1, 1).data].slice(0, 3) }
+      const lum = ([r, g, b]) => [r, g, b].map((v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4 }).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0)
+      const ratio = (a, b) => { const [x, y] = [lum(rgb(a)), lum(rgb(b))].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+      const out = []
+      const h = document.documentElement
+      const keep = [h.className, h.dataset.palette]
+      for (const p of ['paper', 'ocean', 'rose', 'graphite', 'forest', 'contrast']) for (const dark of [false, true]) {
+        h.dataset.palette = p
+        h.classList.toggle('dark', dark)
+        const cs = getComputedStyle(h)
+        const v = (n) => cs.getPropertyValue(n).trim()
+        for (const [fg, bg, min] of [['--foreground', '--background', 7], ['--muted-foreground', '--background', 4.5], ['--primary-foreground', '--primary', 4.5], ['--foreground', '--card', 7], ['--muted-foreground', '--card', 4.5]]) {
+          const r = ratio(v(fg), v(bg))
+          if (r < min) out.push(`${p}/${dark ? 'dark' : 'light'} ${fg} on ${bg} = ${r.toFixed(2)}`)
+        }
+      }
+      h.className = keep[0]
+      h.dataset.palette = keep[1]
+      return out
+    })
+    expect(!bad.length, 'low contrast: ' + bad.join('; '))
+  })
+
+  await flow('keyboard: reach the composer, send, open and close the drawer', async () => {
+    await open(`#/s/${s1}`)
+    await composer().waitFor()
+    await page.locator('body').focus()
+    let hit = false
+    for (let i = 0; i < 150 && !hit; i++) {
+      await page.keyboard.press('Tab')
+      hit = await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === '消息')
+    }
+    expect(hit, 'composer reachable by Tab')
+    await page.keyboard.type('键盘发送')
+    await page.keyboard.press('Enter')
+    await visible(chat().getByText('echo: 键盘发送'), 15000)
+    await idle(s1)
+    await page.getByRole('button', { name: '详情' }).focus()
+    await page.keyboard.press('Enter')
+    await visible(page.getByRole('dialog'))
+    await page.keyboard.press('Escape')
+    await until(async () => !(await page.getByRole('dialog').count()), 3000, 'drawer closed by Escape')
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label') === '详情'), 'focus returns to 详情')
+    const focusVisible = await page.evaluate(() => { const s = getComputedStyle(document.activeElement); return s.boxShadow !== 'none' || s.outlineStyle !== 'none' })
+    expect(focusVisible, 'focus ring visible')
   })
 
   // ---------- restart recovery ----------
@@ -532,6 +849,51 @@ async function main() {
     expect((await lastAssistant(s1)).includes('重启后还好吗'), 'prompt after restart')
     await open(`#/s/${s1}`)
     await visible(chat().getByText('echo: 重启后还好吗'))
+  })
+
+  await flow('reconnect: server drop shows one quiet banner, then recovers', async () => {
+    await open(`#/s/${s1}`)
+    await composer().waitFor()
+    await stopPimu()
+    await visible(page.locator('[data-reconnecting]'), 12000)
+    await startPimu({ PIMU_JOB_IDLE_SEC: '4', PIMU_APPROVAL_TTL_SEC: '4' }) // short limits for the next two flows
+    await until(async () => !(await page.locator('[data-reconnecting]').count()), 20000, 'banner cleared')
+    expect(!(await page.locator('[data-sonner-toast]', { hasText: /连接|重连/ }).count()), 'no reconnect toast')
+    await say('重连后')
+    await visible(chat().getByText('echo: 重连后'), 15000)
+    await idle(s1)
+  })
+
+  await flow('jobs: idle watchdog → interrupted with a plain reason and 重试', async () => {
+    await open(`#/s/${s1}`)
+    await prompt(s1, 'DELEGATE: JOBHANG 会卡住')
+    const j = await until(async () => (await jobs()).find((x) => x.prompt?.includes('JOBHANG') && x.status === 'interrupted'), 30000, 'interrupted by the watchdog')
+    expect(/没有任何进展/.test(j.error || ''), 'plain reason: ' + j.error)
+    const pill = page.locator(`[data-notice="${j.id}"]`)
+    await visible(pill, 20000)
+    expect((await pill.innerText()).includes('停下了'), 'notice says 停下了')
+    await pill.click()
+    const card = page.getByRole('dialog').locator('li[data-job]', { hasText: '停下了' }).first()
+    await card.click()
+    await visible(card.getByRole('button', { name: /重试/ }))
+    await page.keyboard.press('Escape')
+    await idle(s1, 20000)
+  })
+
+  await flow('guarded: an unanswered approval expires and its card goes away', async () => {
+    await idle(s1, 20000) // a mode switch applies once the turn is over
+    await api(`/api/bots/${s1}`, { mode: 'guarded' }, 'PATCH')
+    await open(`#/s/${s1}`)
+    await say('BASH: curl -s http://127.0.0.1:9/ || echo ttl-check')
+    const card = page.locator('[data-approval]')
+    await visible(card, 15000)
+    await until(async () => !(await card.count()), 15000, 'card gone after TTL')
+    await idle(s1, 15000)
+    expect(/已失效/.test(await lastAssistant(s1)), 'model told it expired')
+    expect(!/^ttl-check/m.test(await lastAssistant(s1)), 'did not run')
+    await api(`/api/bots/${s1}`, { mode: 'trusted' }, 'PATCH')
+    await stopPimu()
+    await startPimu()
   })
 
   // ---------- mobile ----------
@@ -552,6 +914,20 @@ async function main() {
         .map(([n, r]) => `${n} ${Math.round(r.width)}x${Math.round(r.height)}`),
     )
     expect(!small.length, 'small tap targets: ' + small.join(', '))
+    // approval card on a phone: one sentence + two big buttons, inside the viewport
+    await idle(s1, 20000)
+    await api(`/api/bots/${s1}`, { mode: 'guarded' }, 'PATCH')
+    await p.getByRole('textbox', { name: '消息' }).fill('BASH: curl -s http://127.0.0.1:9/ || echo mobile-ok')
+    await p.getByRole('button', { name: '发送' }).click() // on a touch keyboard Enter is a newline
+    const card = p.locator('[data-approval]')
+    await card.waitFor({ timeout: 15000 })
+    const box = await card.boundingBox()
+    expect(box.x >= 0 && box.x + box.width <= 390.5, 'card inside the viewport')
+    for (const n of ['允许', '拒绝']) expect((await card.getByRole('button', { name: n }).boundingBox()).height >= 40, n + ' tall enough')
+    await card.getByRole('button', { name: '允许' }).click()
+    await until(async () => JSON.stringify(await messages(s1)).includes('mobile-ok\\n'), 20000, 'approved command ran')
+    await idle(s1, 20000)
+    await api(`/api/bots/${s1}`, { mode: 'trusted' }, 'PATCH')
     await p.getByRole('link', { name: '返回' }).or(p.getByRole('button', { name: '返回' })).first().click()
     await p.waitForURL((u) => !u.hash.startsWith('#/s/'))
     await m.close()

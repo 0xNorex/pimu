@@ -27,7 +27,8 @@ cat > "$T/agent/models.json" <<JSON
  "models":[{"id":"echo-1","name":"Echo One","reasoning":true,"input":["text","image"],"contextWindow":64000,"maxTokens":4096},
            {"id":"echo-2","name":"Echo Two","reasoning":false,"input":["text"],"contextWindow":32000,"maxTokens":2048}]}}}
 JSON
-echo '{"defaultProvider":"mock","defaultModel":"echo-1"}' > "$T/agent/settings.json"
+# no retries (a 500 is final at once); keep almost nothing on /compact so the tiny e2e context compacts
+echo '{"defaultProvider":"mock","defaultModel":"echo-1","retry":{"enabled":false},"compaction":{"keepRecentTokens":1}}' > "$T/agent/settings.json"
 echo '{"mcpServers":{"e2e-off":{"command":"true","description":"e2e placeholder","enabled":false}}}' > "$T/agent/mcp.json"
 
 cleanup() {
